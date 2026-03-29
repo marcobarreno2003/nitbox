@@ -7,7 +7,14 @@
     "build": "nest build",
     "start": "node dist/main",
     "lint": "eslint \"{src}/**/*.ts\"",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "seed": "ts-node -r tsconfig-paths/register prisma/seed/index.ts",
+    "seed:static": "ts-node -r tsconfig-paths/register prisma/seed/index.ts static",
+    "seed:teams": "ts-node -r tsconfig-paths/register prisma/seed/index.ts teams",
+    "seed:competitions": "ts-node -r tsconfig-paths/register prisma/seed/index.ts competitions",
+    "seed:players": "ts-node -r tsconfig-paths/register prisma/seed/index.ts players",
+    "seed:fixtures": "ts-node -r tsconfig-paths/register prisma/seed/index.ts fixtures",
+    "seed:standings": "ts-node -r tsconfig-paths/register prisma/seed/index.ts standings"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
