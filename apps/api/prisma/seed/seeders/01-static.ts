@@ -4,15 +4,14 @@
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
-import { CONFEDERATIONS, COUNTRIES } from '../config';
+import { CONFEDERATIONS, TEAMS } from '../config';
 
 export async function seedStatic(prisma: PrismaClient) {
   console.log('\nSeeding confederations...');
 
-  // Upsert confederations
   for (const conf of CONFEDERATIONS) {
     await prisma.confederation.upsert({
-      where: { code: conf.code },
+      where:  { code: conf.code },
       update: { name: conf.name },
       create: { code: conf.code, name: conf.name },
     });
@@ -21,19 +20,20 @@ export async function seedStatic(prisma: PrismaClient) {
 
   console.log('\nSeeding countries...');
 
-  // Load confederation IDs
   const confMap = new Map<string, number>();
   const confs = await prisma.confederation.findMany();
   confs.forEach(c => confMap.set(c.code, c.id));
 
-  // Upsert countries — use iso3 as stable unique key since some share iso2 (GB)
-  for (const [name, iso2, iso3, confCode] of COUNTRIES) {
-    const confederationId = confMap.get(confCode)!;
+  for (const team of TEAMS) {
+    const confederationId = confMap.get(team.confederation)!;
+
+    // iso2 is not unique (GB is shared by England, Scotland, Wales)
+    // so we upsert by iso3 which is always unique
     await prisma.country.upsert({
-      where: { isoAlpha3: iso3 },
-      update: { name, isoAlpha2: iso2, confederationId },
-      create: { name, isoAlpha2: iso2, isoAlpha3: iso3, confederationId },
+      where:  { isoAlpha3: team.iso3 },
+      update: { name: team.countryName, isoAlpha2: team.iso2, confederationId },
+      create: { name: team.countryName, isoAlpha2: team.iso2, isoAlpha3: team.iso3, confederationId },
     });
-    console.log(`  [OK] ${name} (${iso3})`);
+    console.log(`  [OK] ${team.countryName} (${team.iso3})`);
   }
 }

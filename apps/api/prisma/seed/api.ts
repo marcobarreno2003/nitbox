@@ -5,10 +5,17 @@
 
 import { API_BASE_URL } from './config';
 
+export class DailyLimitError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'DailyLimitError';
+  }
+}
+
 const API_KEY = process.env.API_FOOTBALL_KEY!;
 
 // Free plan: 100 requests/day, ~10 req/min
-const DELAY_MS = 1200; // ~50 req/min to be safe
+const DELAY_MS = 6500; // 10 req/min limit → 1 req per 6s, with buffer
 
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -30,9 +37,13 @@ export async function apiGet<T>(endpoint: string, params: Record<string, string 
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
 
-  const json = await res.json() as { response: T[]; errors: unknown };
+  const json = await res.json() as { response: T[]; errors: Record<string, string> };
 
-  if (json.errors && Object.keys(json.errors as object).length > 0) {
+  if (json.errors && Object.keys(json.errors).length > 0) {
+    const errorMsg = Object.values(json.errors).join(' ');
+    if (errorMsg.toLowerCase().includes('request limit')) {
+      throw new DailyLimitError(errorMsg);
+    }
     console.warn('  [WARN] API warnings:', json.errors);
   }
 

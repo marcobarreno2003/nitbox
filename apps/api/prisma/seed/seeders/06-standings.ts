@@ -94,70 +94,46 @@ export async function seedStandings(prisma: PrismaClient) {
         const teamDbId = teamMap.get(row.team.id);
         if (!teamDbId) continue;
 
-        await prisma.standing.upsert({
-          where: {
-            competitionSeasonId_groupId_teamId: {
-              competitionSeasonId: seasonId,
-              groupId: null,
-              teamId:  teamDbId,
-            },
-          },
-          update: {
-            position:         row.rank,
-            form:             row.form,
-            status:           row.status,
-            description:      row.description,
-            points:           row.points,
-            goalDifference:   row.goalsDiff,
-            played:           row.all.played,
-            won:              row.all.win,
-            drawn:            row.all.draw,
-            lost:             row.all.lose,
-            goalsFor:         row.all.goals.for,
-            goalsAgainst:     row.all.goals.against,
-            homePlayed:       row.home.played,
-            homeWon:          row.home.win,
-            homeDrawn:        row.home.draw,
-            homeLost:         row.home.lose,
-            homeGoalsFor:     row.home.goals.for,
-            homeGoalsAgainst: row.home.goals.against,
-            awayPlayed:       row.away.played,
-            awayWon:          row.away.win,
-            awayDrawn:        row.away.draw,
-            awayLost:         row.away.lose,
-            awayGoalsFor:     row.away.goals.for,
-            awayGoalsAgainst: row.away.goals.against,
-          },
-          create: {
-            competitionSeasonId: seasonId,
-            groupId:          null,
-            teamId:           teamDbId,
-            position:         row.rank,
-            form:             row.form,
-            status:           row.status,
-            description:      row.description,
-            points:           row.points,
-            goalDifference:   row.goalsDiff,
-            played:           row.all.played,
-            won:              row.all.win,
-            drawn:            row.all.draw,
-            lost:             row.all.lose,
-            goalsFor:         row.all.goals.for,
-            goalsAgainst:     row.all.goals.against,
-            homePlayed:       row.home.played,
-            homeWon:          row.home.win,
-            homeDrawn:        row.home.draw,
-            homeLost:         row.home.lose,
-            homeGoalsFor:     row.home.goals.for,
-            homeGoalsAgainst: row.home.goals.against,
-            awayPlayed:       row.away.played,
-            awayWon:          row.away.win,
-            awayDrawn:        row.away.draw,
-            awayLost:         row.away.lose,
-            awayGoalsFor:     row.away.goals.for,
-            awayGoalsAgainst: row.away.goals.against,
-          },
+        // Prisma upsert does not support null in compound unique keys
+        // so we use findFirst + create/update pattern
+        const standingData = {
+          position:         row.rank,
+          form:             row.form,
+          status:           row.status,
+          description:      row.description,
+          points:           row.points,
+          goalDifference:   row.goalsDiff,
+          played:           row.all.played,
+          won:              row.all.win,
+          drawn:            row.all.draw,
+          lost:             row.all.lose,
+          goalsFor:         row.all.goals.for,
+          goalsAgainst:     row.all.goals.against,
+          homePlayed:       row.home.played,
+          homeWon:          row.home.win,
+          homeDrawn:        row.home.draw,
+          homeLost:         row.home.lose,
+          homeGoalsFor:     row.home.goals.for,
+          homeGoalsAgainst: row.home.goals.against,
+          awayPlayed:       row.away.played,
+          awayWon:          row.away.win,
+          awayDrawn:        row.away.draw,
+          awayLost:         row.away.lose,
+          awayGoalsFor:     row.away.goals.for,
+          awayGoalsAgainst: row.away.goals.against,
+        };
+
+        const existing = await prisma.standing.findFirst({
+          where: { competitionSeasonId: seasonId, groupId: null, teamId: teamDbId },
         });
+
+        if (existing) {
+          await prisma.standing.update({ where: { id: existing.id }, data: standingData });
+        } else {
+          await prisma.standing.create({
+            data: { competitionSeasonId: seasonId, groupId: null, teamId: teamDbId, ...standingData },
+          });
+        }
 
         // Fetch team season stats
         await seedTeamSeasonStats(prisma, teamDbId, row.team.id, leagueId, season, seasonId);

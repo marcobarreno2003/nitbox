@@ -1,3 +1,9 @@
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+// Load from apps/api/.env first, then fall back to root .env
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+
 // =============================================================================
 // NITBox Seed Orchestrator
 // Run: npx ts-node prisma/seed/index.ts
@@ -7,6 +13,7 @@
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
+import { DailyLimitError } from './api';
 import { seedStatic }       from './seeders/01-static';
 import { seedTeams }        from './seeders/02-teams';
 import { seedCompetitions } from './seeders/03-competitions';
@@ -35,6 +42,10 @@ async function main() {
 
     console.log('\nSeed complete!\n');
   } catch (err) {
+    if (err instanceof DailyLimitError) {
+      console.error('\n[STOP] Daily API limit reached. Progress saved. Run again tomorrow.');
+      process.exit(0);
+    }
     console.error('\nSeed failed:', err);
     process.exit(1);
   } finally {

@@ -117,7 +117,7 @@ export async function seedPlayers(prisma: PrismaClient) {
         create: {
           apiFootballId: sp.id, 
           firstName:     p?.firstname ?? sp.name.split(' ')[0],
-          lastName:      p?.lastname  ?? sp.name.split(' ').slice(1).join(' ') || '-',
+          lastName:      (p?.lastname ?? sp.name.split(' ').slice(1).join(' ')) || '-',
           commonName:    p?.name ?? sp.name,
           dateOfBirth:   p?.birth?.date ? new Date(p.birth.date) : new Date('1990-01-01'),
           birthPlace:    p?.birth?.place ?? null,

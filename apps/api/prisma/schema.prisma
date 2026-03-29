@@ -30,7 +30,7 @@ model Confederation {
 
 model Country {
   id               Int           @id @default(autoincrement())
-  isoAlpha2        String        @unique @db.VarChar(2)
+  isoAlpha2        String        @db.VarChar(2)
   isoAlpha3        String        @unique @db.VarChar(3)
   name             String        @unique @db.VarChar(100)
   flagUrl          String?       @db.VarChar(500)
