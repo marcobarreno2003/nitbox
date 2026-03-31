@@ -1,100 +1,43 @@
-# NITBox — Numbers in the Box
-
-Football analytics platform focused on the 60 most important national teams in the world.
-Data-driven insights powered by API-Football v3, stored in a relational 3NF database, and served through a RESTful API.
-
----
-
-## Stack
-
-| Layer    | Technology                                    |
-|----------|-----------------------------------------------|
-| Frontend | Next.js 14 (App Router), TypeScript           |
-| Backend  | NestJS 10, TypeScript, Prisma ORM             |
-| ML       | FastAPI, Python 3.11                          |
-| Database | PostgreSQL 16                                 |
-| Monorepo | Turborepo + npm workspaces                    |
-| Data     | API-Football v3 (api-sports.io)               |
+<div align="center">
+  <img src="apps/web/public/nitbox-full-wordmark.png" alt="NITBox" width="360" />
+  <br/><br/>
+  <p>Football analytics for everyone, not just analysts.</p>
+</div>
 
 ---
 
-## Project Structure
-
-```
-nitbox/
-├── apps/
-│   ├── api/                    # NestJS backend
-│   │   ├── prisma/
-│   │   │   ├── schema.prisma   # 23-model Prisma schema (3NF)
-│   │   │   ├── schema.sql      # DDL for DataGrip / visualization
-│   │   │   └── seed/
-│   │   │       ├── index.ts    # Seed orchestrator
-│   │   │       ├── api.ts      # API-Football HTTP client
-│   │   │       ├── config.ts   # 60 teams + 12 competitions config
-│   │   │       └── seeders/
-│   │   │           ├── 01-static.ts        # Confederations + countries
-│   │   │           ├── 02-teams.ts         # National teams
-│   │   │           ├── 03-competitions.ts  # Competitions + seasons
-│   │   │           ├── 04-fixtures.ts      # Matches + stats + events
-│   │   │           ├── 05-players.ts       # Players + squads
-│   │   │           └── 06-standings.ts     # Standings + team season stats
-│   │   └── src/
-│   │       ├── controllers/    # Input validation + HTTP layer
-│   │       ├── routes/         # NestJS modules per resource
-│   │       └── services/       # Business logic + Prisma queries
-│   ├── web/                    # Next.js frontend
-│   └── ml/                     # FastAPI ML service
-└── packages/
-    └── types/                  # Shared TypeScript types
-```
+NITBox tracks the 60 most important national teams in the world across 12 competitions and 4 seasons. The goal is to turn raw football data into clear, accessible stories — not tables of numbers, but insights that make sense to any fan.
 
 ---
 
-## Prerequisites
+## How it works
 
-- Node.js 22 (`nvm use 22` — Prisma 5.x is incompatible with Node 24)
-- PostgreSQL 16
-- npm 10+
+```
+API-Football v3
+      │
+      │  HTTP (seed pipeline)
+      ▼
+PostgreSQL 16  ◄──── Prisma ORM ────► NestJS API (REST)
+                                             │
+                                             │ HTTP
+                                      ┌──────┴──────┐
+                                      │             │
+                                   Next.js        FastAPI
+                                  Frontend        ML Service
+                                      │
+                              Payload CMS
+                               (blog admin)
+```
+
+Data flows in one direction: API-Football is the source of truth. A seed pipeline fetches and normalizes the data into PostgreSQL. The NestJS API exposes that data to the frontend. The ML service reads from the same database to generate predictive insights. The blog lets us publish the story behind the numbers.
 
 ---
 
-## Setup
+## Infrastructure
 
-### 1. Clone and install dependencies
+### Data layer — PostgreSQL + Prisma
 
-```bash
-git clone https://github.com/your-username/nitbox.git
-cd nitbox
-npm install
-```
-
-### 2. Environment variables
-
-Create `apps/api/.env`:
-
-```env
-DATABASE_URL="postgresql://<user>@localhost:5432/nitbox"
-API_FOOTBALL_KEY="your_api_football_key"
-```
-
-### 3. Create the database
-
-```bash
-createdb nitbox
-```
-
-### 4. Apply schema
-
-```bash
-cd apps/api
-npx prisma db push
-```
-
----
-
-## Database
-
-The schema has 23 models organized around the following hierarchy:
+A 23-model relational schema designed in 3NF. The hierarchy follows how football is structured:
 
 ```
 Confederation → Country → NationalTeam
@@ -104,118 +47,81 @@ Player → PlayerMatchStats / PlayerSeasonStats
 TeamSeasonStats / Standing / Trophy / PlayerInjury
 ```
 
-All API-mapped models include `apiFootballId Int @unique` for sync tracking.
-`isoAlpha3` is the unique country code (`isoAlpha2` is not unique — England, Scotland, and Wales all share `GB`).
+Every API-mapped model stores `apiFootballId` as a unique identifier to make the sync pipeline fully idempotent — seeders can be re-run at any time without creating duplicates.
+
+**Coverage:**
+- 60 national teams across 6 confederations (UEFA 23, CONMEBOL 10, CAF 12, AFC 8, CONCACAF 7)
+- 12 competitions: World Cup, Euro, Copa America, AFCON, Asian Cup, Gold Cup, Nations League + 5 WCQ zones
+- Seasons 2021, 2022, 2023, 2024
 
 ---
 
-## Seeding
+### Seed pipeline — API-Football v3
 
-The seed pipeline fetches data from API-Football v3.
-The free plan allows 100 requests/day at 10 req/min.
-
-Seeders are fully idempotent — safe to re-run when the daily limit resets.
-Run order respects foreign key constraints:
+Data is fetched via a phased seed pipeline that respects FK constraints and API rate limits (10 req/min):
 
 ```
-01-static → 02-teams → 03-competitions → 04-fixtures → 05-players → 06-standings
+01-static       Confederations + countries          no API
+02-teams        60 national teams                   1 req/team
+03-competitions 12 competitions × 4 seasons         ~48 req
+04-fixtures     Matches + stats + events            variable
+05-players      Squad rosters per team              1 req/team
+06-standings    League tables + team season stats   variable
 ```
 
-### Run all seeders
-
-```bash
-cd apps/api
-npm run seed
-```
-
-### Run individual phases
-
-```bash
-npm run seed:static        # Confederations + countries (no API calls)
-npm run seed:teams         # 60 national teams
-npm run seed:competitions  # 12 competitions + seasons 2021-2024
-npm run seed:players       # Players via squads endpoint
-npm run seed:fixtures      # Matches + statistics + events
-npm run seed:standings     # Standings + team season stats
-```
-
-> If the daily API limit is reached, the process exits cleanly (`DailyLimitError`) and all progress up to that point is saved. Resume with the same command the next day.
-
-### Competitions covered
-
-| Competition                          | Confederation |
-|--------------------------------------|---------------|
-| FIFA World Cup                       | FIFA          |
-| UEFA European Championship           | UEFA          |
-| Copa America                         | CONMEBOL      |
-| Africa Cup of Nations (AFCON)        | CAF           |
-| AFC Asian Cup                        | AFC           |
-| CONCACAF Gold Cup                    | CONCACAF      |
-| UEFA Nations League                  | UEFA          |
-| WCQ — CONMEBOL / UEFA / CAF / AFC / CONCACAF | regional |
-
-Seasons: 2021, 2022, 2023, 2024.
+If the daily request limit is hit, the process saves progress and exits cleanly. Re-running any phase resumes from where it left off.
 
 ---
 
-## Running the API
+### Backend — NestJS
 
-```bash
-cd apps/api
-npm run dev
-```
+RESTful API organized around three layers:
 
-The API runs at `http://localhost:3000`.
+- **Routes** — NestJS module definitions per resource
+- **Controllers** — input validation and HTTP handling
+- **Services** — business logic and Prisma queries
 
----
-
-## API Endpoints
-
-### Teams
-
-| Method | Endpoint       | Description              |
-|--------|----------------|--------------------------|
-| GET    | `/teams`       | List all 60 national teams |
-| GET    | `/teams/:id`   | Get a team by DB id      |
-
-### Matches
-
-| Method | Endpoint              | Description                        |
-|--------|-----------------------|------------------------------------|
-| GET    | `/matches`            | List all matches (optional `?teamId=`) |
-| GET    | `/matches/:id`        | Get a match by DB id               |
-
-### Planned endpoints
-
-| Method | Endpoint                                | Description                     |
-|--------|-----------------------------------------|---------------------------------|
-| GET    | `/teams/:id/standings`                  | Standings by team               |
-| GET    | `/teams/:id/stats`                      | Season stats by team            |
-| GET    | `/competitions`                         | List all competitions           |
-| GET    | `/competitions/:id/standings`           | Standings for a competition     |
-| GET    | `/players/:id`                          | Player profile                  |
-| GET    | `/players/:id/stats`                    | Player season stats             |
+| Endpoint | Description |
+|----------|-------------|
+| `GET /teams` | All 60 national teams |
+| `GET /teams/:id` | Team profile |
+| `GET /matches` | Recent matches (filterable by team) |
+| `GET /matches/:id` | Match detail |
 
 ---
 
-## Development
+### Frontend — Next.js 14
 
-```bash
-# Run all apps in parallel (Turborepo)
-npm run dev
+Dark-theme interface built for readability. The design principle: one number, one story. Not a data dump — each stat is shown with the context that makes it meaningful.
 
-# Lint
-npm run lint
-
-# Build
-npm run build
-```
+Pages: homepage, matches, live, blog, search (team vs team + year).
 
 ---
 
-## Data Coverage
+### Blog — Payload CMS
 
-- 60 national teams across 6 confederations (UEFA 23, CAF 12, AFC 8, CONCACAF 7, CONMEBOL 10)
-- 12 competitions including World Cup, continental tournaments, and qualifiers
-- Seasons 2021–2024
-- Per-match statistics, lineups, events, player stats, and standings
+A headless CMS running alongside the frontend. Articles are written in a rich-text editor and published via a REST API consumed by Next.js. Each article can be tagged with related teams and linked to real data from the database.
+
+---
+
+### ML — FastAPI
+
+Python service that reads from the same PostgreSQL database. Planned models:
+
+- Match outcome prediction based on recent form
+- Offensive and defensive tendency profiling
+- Custom performance ranking (independent of FIFA ranking)
+
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Backend | NestJS 10, TypeScript, Prisma ORM |
+| CMS | Payload CMS v3 |
+| ML | FastAPI, Python 3.11 |
+| Database | PostgreSQL 16 |
+| Monorepo | Turborepo + npm workspaces |
+| Data source | API-Football v3 |
