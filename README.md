@@ -1,14 +1,14 @@
 <div align="center">
   <img src="apps/web/public/nitbox-full-wordmark.png" alt="NITBox" width="360" />
   <br/><br/>
-  <p>Football soccer stats for everyone.</p>
+  <p>Football stats for everyone.</p>
 </div>
 
 ---
 
 NITBox tracks the 60 most important national teams in the world across 12 competitions and 4 seasons. The goal is to turn raw football data into clear, accessible stories — not tables of numbers, but insights that make sense to any fan.
 
-The idea is to start with national teams just for the world cup. Then the data of clubs will be added.
+Starting with national teams, with club data planned for a future phase.
 
 ---
 
