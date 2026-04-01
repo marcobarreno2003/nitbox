@@ -80,6 +80,13 @@ export async function seedStandings(prisma: PrismaClient) {
 
     console.log(`\n  ${cs.competition.shortName} ${season}`);
 
+    // Skip if standings already exist for this competition+season
+    const existingStandings = await prisma.standing.count({ where: { competitionSeasonId: seasonId } });
+    if (existingStandings > 0) {
+      console.log(`    [SKIP] Already have ${existingStandings} standings`);
+      continue;
+    }
+
     const results = await apiGet<ApiStandingsResponse>('standings', {
       league: leagueId,
       season,
@@ -152,6 +159,12 @@ async function seedTeamSeasonStats(
   season: number,
   seasonId: number,
 ) {
+  // Skip if team season stats already exist
+  const existingStats = await prisma.teamSeasonStats.findUnique({
+    where: { teamId_competitionSeasonId: { teamId: teamDbId, competitionSeasonId: seasonId } },
+  });
+  if (existingStats) return;
+
   const results = await apiGet<ApiTeamStats>('teams/statistics', {
     team:   teamApiId,
     league: leagueId,

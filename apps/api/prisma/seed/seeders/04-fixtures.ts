@@ -169,6 +169,10 @@ async function seedMatchStats(
   homeDbId: number,
   awayDbId: number,
 ) {
+  // Skip if stats already exist for this match
+  const existingStats = await prisma.matchTeamStatistics.count({ where: { matchId } });
+  if (existingStats > 0) return;
+
   const results = await apiGet<ApiStatResponse>('fixtures/statistics', { fixture: fixtureApiId });
 
   for (const r of results) {
@@ -225,10 +229,11 @@ async function seedMatchEvents(
   fixtureApiId: number,
   teamMap: Map<number, number>,
 ) {
-  const events = await apiGet<ApiEvent>('fixtures/events', { fixture: fixtureApiId });
+  // Skip if events already exist for this match
+  const existingEvents = await prisma.matchEvent.count({ where: { matchId } });
+  if (existingEvents > 0) return;
 
-  // Delete existing events for idempotency
-  await prisma.matchEvent.deleteMany({ where: { matchId } });
+  const events = await apiGet<ApiEvent>('fixtures/events', { fixture: fixtureApiId });
 
   for (const e of events) {
     const teamDbId = teamMap.get(e.team.id);

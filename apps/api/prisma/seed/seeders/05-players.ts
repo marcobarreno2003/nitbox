@@ -70,7 +70,14 @@ export async function seedPlayers(prisma: PrismaClient) {
   countries.forEach(c => countryMap.set(c.name, c.id));
 
   for (const team of teams) {
-    console.log(`\n  🔍 ${team.name}`);
+    console.log(`\n  ${team.name}`);
+
+    // Skip if squad already seeded for this team
+    const existingSquad = await prisma.squad.findFirst({ where: { teamId: team.id, competitionSeasonId: null } });
+    if (existingSquad) {
+      console.log(`    [SKIP] Squad already in DB`);
+      continue;
+    }
 
     // Get current squad roster
     const squadResults = await apiGet<ApiSquadResponse>('players/squads', { team: team.apiFootballId });
@@ -133,6 +140,15 @@ export async function seedPlayers(prisma: PrismaClient) {
         },
       });
     }
+
+    // Mark this team's squad as seeded
+    await prisma.squad.create({
+      data: {
+        teamId:             team.id,
+        competitionSeasonId: null,
+        label:              'Current Squad',
+      },
+    });
 
     console.log(`    [OK] ${squadPlayers.length} players upserted`);
   }

@@ -43,6 +43,13 @@ export async function seedTeams(prisma: PrismaClient) {
       continue;
     }
 
+    // Skip if already in DB
+    const existing = await prisma.nationalTeam.findUnique({ where: { apiFootballId: teamConfig.apiFootballId } });
+    if (existing) {
+      console.log(`  [SKIP] ${teamConfig.countryName} — already in DB`);
+      continue;
+    }
+
     const results = await apiGet<ApiTeamResponse>('teams', { id: teamConfig.apiFootballId });
 
     if (!results.length) {

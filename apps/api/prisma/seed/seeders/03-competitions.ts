@@ -36,6 +36,20 @@ export async function seedCompetitions(prisma: PrismaClient) {
   confs.forEach(c => confMap.set(c.code, c.id));
 
   for (const comp of COMPETITIONS) {
+    // Skip if competition + all target seasons already in DB
+    const existing = await prisma.competition.findUnique({
+      where: { apiFootballId: comp.apiFootballId },
+      include: { seasons: true },
+    });
+    if (existing) {
+      const seededYears = existing.seasons.map(s => s.apiFootballSeason);
+      const allExist = SEASONS.every(y => seededYears.includes(y));
+      if (allExist) {
+        console.log(`  [SKIP] ${comp.name} — already in DB`);
+        continue;
+      }
+    }
+
     const results = await apiGet<ApiLeagueResponse>('leagues', { id: comp.apiFootballId });
 
     if (!results.length) {
