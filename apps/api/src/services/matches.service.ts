@@ -8,16 +8,16 @@ export class MatchesService {
   findAll(teamId?: number) {
     return this.prisma.match.findMany({
       where: teamId
-        ? {
-            OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
-          }
+        ? { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] }
         : undefined,
       include: {
         homeTeam: true,
         awayTeam: true,
-        competition: true,
+        competitionSeason: {
+          include: { competition: true },
+        },
       },
-      orderBy: { date: 'desc' },
+      orderBy: { kickoffAt: 'desc' },
     })
   }
 
@@ -27,8 +27,10 @@ export class MatchesService {
       include: {
         homeTeam: true,
         awayTeam: true,
-        competition: true,
-        stats: true,
+        competitionSeason: {
+          include: { competition: true },
+        },
+        teamStatistics: true,
       },
     })
     if (!match) throw new NotFoundException(`Match ${id} not found`)
