@@ -14,8 +14,7 @@ export class DailyLimitError extends Error {
 
 const API_KEY = process.env.API_FOOTBALL_KEY!;
 
-// Free plan: 100 requests/day, ~10 req/min
-const DELAY_MS = 6500; // 10 req/min limit → 1 req per 6s, with buffer
+const DELAY_MS = 6500; 
 
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

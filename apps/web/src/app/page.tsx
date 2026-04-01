@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import LiveBanner from '@/components/LiveBanner'
 
 // Placeholder data — se reemplaza con fetch al API cuando los seeds esten listos
 const recentMatches = [
@@ -84,6 +85,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Live banner — only renders if matches are in progress */}
+      <LiveBanner />
 
       {/* Recent matches */}
       <section className="space-y-6">

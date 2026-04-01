@@ -2,6 +2,10 @@
 // Seeder 05: Players + Squads
 // Source: GET /players/squads?team={id}
 //         GET /players?team={id}&season={year}
+//
+// Skip logic:
+//   - Skip entire team if squad marker already exists (squad + profiles already in DB)
+//   - For new seeds, fetch profiles with LATEST_SEASON (2025)
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
@@ -52,6 +56,9 @@ interface ApiPlayerResponse {
   }[];
 }
 
+// Use current year as the latest season — API-Football seasons match calendar years
+const LATEST_SEASON = new Date().getFullYear();
+
 function parseCm(val: string | null): number | null {
   if (!val) return null;
   const n = parseInt(val.replace(/[^\d]/g, ''));
@@ -65,7 +72,7 @@ export async function seedPlayers(prisma: PrismaClient) {
     include: { country: true },
   });
 
-  const countryMap = new Map<string, number>(); // country name → db id
+  const countryMap = new Map<string, number>();
   const countries = await prisma.country.findMany();
   countries.forEach(c => countryMap.set(c.name, c.id));
 
@@ -73,13 +80,15 @@ export async function seedPlayers(prisma: PrismaClient) {
     console.log(`\n  ${team.name}`);
 
     // Skip if squad already seeded for this team
-    const existingSquad = await prisma.squad.findFirst({ where: { teamId: team.id, competitionSeasonId: null } });
+    const existingSquad = await prisma.squad.findFirst({
+      where: { teamId: team.id, competitionSeasonId: null },
+    });
     if (existingSquad) {
-      console.log(`    [SKIP] Squad already in DB`);
+      console.log(`    [SKIP] Already in DB`);
       continue;
     }
 
-    // Get current squad roster
+    // Fetch current squad roster
     const squadResults = await apiGet<ApiSquadResponse>('players/squads', { team: team.apiFootballId });
 
     if (!squadResults.length) {
@@ -89,16 +98,15 @@ export async function seedPlayers(prisma: PrismaClient) {
 
     const squadPlayers = squadResults[0].players;
 
-    // Fetch full player profiles for this team (latest season)
+    // Fetch player profiles enriched with latest season data
     const playerProfiles = await apiGet<ApiPlayerResponse>('players', {
-      team: team.apiFootballId,
-      season: 2024,
+      team:   team.apiFootballId,
+      season: LATEST_SEASON,
     });
 
     const profileMap = new Map<number, ApiPlayerResponse>();
     playerProfiles.forEach(p => profileMap.set(p.player.id, p));
 
-    // Upsert each player
     for (const sp of squadPlayers) {
       const profile = profileMap.get(sp.id);
       const p = profile?.player;
@@ -114,39 +122,39 @@ export async function seedPlayers(prisma: PrismaClient) {
       await prisma.player.upsert({
         where: { apiFootballId: sp.id },
         update: {
-          commonName:    p?.name ?? sp.name,
-          position:      normalizePosition(sp.position),
-          photoUrl:      sp.photo,
-          isInjured:     p?.injured ?? false,
-          heightCm:      parseCm(p?.height ?? null),
-          weightKg:      parseCm(p?.weight ?? null),
+          commonName: p?.name ?? sp.name,
+          position:   normalizePosition(sp.position),
+          photoUrl:   sp.photo,
+          isInjured:  p?.injured ?? false,
+          heightCm:   parseCm(p?.height ?? null),
+          weightKg:   parseCm(p?.weight ?? null),
         },
         create: {
-          apiFootballId: sp.id, 
-          firstName:     p?.firstname ?? sp.name.split(' ')[0],
-          lastName:      (p?.lastname ?? sp.name.split(' ').slice(1).join(' ')) || '-',
-          commonName:    p?.name ?? sp.name,
-          dateOfBirth:   p?.birth?.date ? new Date(p.birth.date) : new Date('1990-01-01'),
-          birthPlace:    p?.birth?.place ?? null,
+          apiFootballId:  sp.id,
+          firstName:      p?.firstname ?? sp.name.split(' ')[0],
+          lastName:       (p?.lastname ?? sp.name.split(' ').slice(1).join(' ')) || '-',
+          commonName:     p?.name ?? sp.name,
+          dateOfBirth:    p?.birth?.date ? new Date(p.birth.date) : new Date('1990-01-01'),
+          birthPlace:     p?.birth?.place ?? null,
           birthCountryId,
           nationalityId,
-          position:      normalizePosition(sp.position),
-          shirtNumber:   sp.number,
-          photoUrl:      sp.photo,
-          isActive:      true,
-          isInjured:     p?.injured ?? false,
-          heightCm:      parseCm(p?.height ?? null),
-          weightKg:      parseCm(p?.weight ?? null),
+          position:       normalizePosition(sp.position),
+          shirtNumber:    sp.number,
+          photoUrl:       sp.photo,
+          isActive:       true,
+          isInjured:      p?.injured ?? false,
+          heightCm:       parseCm(p?.height ?? null),
+          weightKg:       parseCm(p?.weight ?? null),
         },
       });
     }
 
-    // Mark this team's squad as seeded
+    // Mark squad as seeded
     await prisma.squad.create({
       data: {
-        teamId:             team.id,
+        teamId:              team.id,
         competitionSeasonId: null,
-        label:              'Current Squad',
+        label:               'Current Squad',
       },
     });
 
@@ -156,10 +164,10 @@ export async function seedPlayers(prisma: PrismaClient) {
 
 function normalizePosition(pos: string): string {
   const map: Record<string, string> = {
-    'Goalkeeper':  'GK',
-    'Defender':    'CB',
-    'Midfielder':  'CM',
-    'Attacker':    'ST',
+    'Goalkeeper': 'GK',
+    'Defender':   'CB',
+    'Midfielder': 'CM',
+    'Attacker':   'ST',
   };
   return map[pos] ?? pos;
 }

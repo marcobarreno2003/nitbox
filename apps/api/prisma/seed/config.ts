@@ -21,8 +21,12 @@ export const COMPETITIONS = [
   { apiFootballId: 33, name: 'World Cup Qualification - CONCACAF',  shortName: 'WCQ CONCACAF',   type: 'qualifier',   confederation: 'CONCACAF' },
 ];
 
-// Seasons to fetch
-export const SEASONS = [2021, 2022, 2023, 2024];
+// Seasons to fetch — always from 2021 up to current year
+const currentYear = new Date().getFullYear();
+export const SEASONS: number[] = Array.from(
+  { length: currentYear - 2021 + 1 },
+  (_, i) => 2021 + i,
+);
 
 export const CONFEDERATIONS = [
   { code: 'FIFA',     name: 'Federation Internationale de Football Association' },

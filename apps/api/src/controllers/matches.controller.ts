@@ -18,6 +18,16 @@ export class MatchesController {
     return this.matchesService.findAll(teamId ? Number(teamId) : undefined)
   }
 
+  @Get('live')
+  @ApiOperation({
+    summary: 'Live matches',
+    description: 'Returns all currently live matches involving our 60 national teams. Data is fetched in real-time from API-Football.',
+  })
+  @ApiResponse({ status: 200, description: 'List of live matches. Empty array if none are in progress.' })
+  findLive() {
+    return this.matchesService.findLive()
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get a match by ID',

@@ -1,8 +1,11 @@
 // =============================================================================
 // Seeder 04: Matches + Match Team Statistics + Match Events
+//            + Match Lineups + Lineup Players + Player Match Stats
 // Source: GET /fixtures?league={id}&season={year}
 //         GET /fixtures/statistics?fixture={id}
 //         GET /fixtures/events?fixture={id}
+//         GET /fixtures/lineups?fixture={id}
+//         GET /fixtures/players?fixture={id}
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
@@ -49,6 +52,58 @@ interface ApiEvent {
   type: string;
   detail: string;
   comments: string | null;
+}
+
+interface ApiLineupPlayer {
+  id: number;
+  name: string;
+  number: number;
+  pos: string;
+  grid: string | null;
+}
+
+interface ApiLineupResponse {
+  team: { id: number };
+  coach: { id: number | null; name: string | null };
+  formation: string | null;
+  startXI: { player: ApiLineupPlayer }[];
+  substitutes: { player: ApiLineupPlayer }[];
+}
+
+interface ApiPlayerStatPlayer {
+  id: number;
+  name: string;
+}
+
+interface ApiPlayerStatTeam {
+  id: number;
+}
+
+interface ApiPlayerStatEntry {
+  player: ApiPlayerStatPlayer;
+  statistics: {
+    games: {
+      minutes: number | null;
+      rating: string | null;
+      captain: boolean;
+      substitute: boolean;
+    };
+    offsides: number | null;
+    shots:    { total: number | null; on: number | null };
+    goals:    { total: number | null; conceded: number | null; assists: number | null; saves: number | null };
+    passes:   { total: number | null; key: number | null; accuracy: string | null };
+    tackles:  { total: number | null; blocks: number | null; interceptions: number | null };
+    duels:    { total: number | null; won: number | null };
+    dribbles: { attempts: number | null; success: number | null; past: number | null };
+    fouls:    { drawn: number | null; committed: number | null };
+    cards:    { yellow: number; red: number };
+    penalty:  { won: number | null; commited: number | null; scored: number | null; missed: number | null; saved: number | null };
+  }[];
+}
+
+interface ApiPlayerStatsResponse {
+  team: ApiPlayerStatTeam;
+  players: ApiPlayerStatEntry[];
 }
 
 function parseStat(stats: ApiStatEntry[], type: string): number | null {
@@ -156,6 +211,12 @@ export async function seedFixtures(prisma: PrismaClient) {
 
       // Fetch & upsert match events
       await seedMatchEvents(prisma, match.id, f.fixture.id, teamMap);
+
+      // Fetch & upsert match lineups + lineup players
+      await seedMatchLineups(prisma, match.id, f.fixture.id, teamMap);
+
+      // Fetch & upsert player match stats
+      await seedMatchPlayerStats(prisma, match.id, f.fixture.id, teamMap);
 
       console.log(`    [OK] ${f.teams.home.name} ${f.score.fulltime.home}-${f.score.fulltime.away} ${f.teams.away.name}`);
     }
@@ -265,5 +326,136 @@ async function seedMatchEvents(
         comments:      e.comments,
       },
     });
+  }
+}
+
+async function seedMatchLineups(
+  prisma: PrismaClient,
+  matchId: number,
+  fixtureApiId: number,
+  teamMap: Map<number, number>,
+) {
+  // Skip if lineups already exist for this match
+  const existingLineups = await prisma.matchLineup.count({ where: { matchId } });
+  if (existingLineups > 0) return;
+
+  const lineups = await apiGet<ApiLineupResponse>('fixtures/lineups', { fixture: fixtureApiId });
+
+  for (const lineup of lineups) {
+    const teamDbId = teamMap.get(lineup.team.id);
+    if (!teamDbId) continue;
+
+    // Resolve coach if present
+    let coachDbId: number | null = null;
+    if (lineup.coach.id) {
+      const coach = await prisma.coach.findUnique({ where: { apiFootballId: lineup.coach.id } });
+      coachDbId = coach?.id ?? null;
+    }
+
+    const matchLineup = await prisma.matchLineup.upsert({
+      where: { matchId_teamId: { matchId, teamId: teamDbId } },
+      update: { formation: lineup.formation, coachId: coachDbId },
+      create: {
+        matchId,
+        teamId:    teamDbId,
+        coachId:   coachDbId,
+        formation: lineup.formation,
+      },
+    });
+
+    const allPlayers = [
+      ...lineup.startXI.map(e => ({ ...e.player, isStarter: true })),
+      ...lineup.substitutes.map(e => ({ ...e.player, isStarter: false })),
+    ];
+
+    for (const lp of allPlayers) {
+      const player = await prisma.player.findUnique({ where: { apiFootballId: lp.id } });
+      if (!player) continue;
+
+      await prisma.lineupPlayer.upsert({
+        where: { lineupId_playerId: { lineupId: matchLineup.id, playerId: player.id } },
+        update: {},
+        create: {
+          lineupId:     matchLineup.id,
+          playerId:     player.id,
+          shirtNumber:  lp.number,
+          positionCode: lp.pos || null,
+          gridPosition: lp.grid,
+          isStarter:    lp.isStarter,
+        },
+      });
+    }
+  }
+}
+
+async function seedMatchPlayerStats(
+  prisma: PrismaClient,
+  matchId: number,
+  fixtureApiId: number,
+  teamMap: Map<number, number>,
+) {
+  // Skip if player stats already exist for this match
+  const existingStats = await prisma.playerMatchStats.count({ where: { matchId } });
+  if (existingStats > 0) return;
+
+  const teamStats = await apiGet<ApiPlayerStatsResponse>('fixtures/players', { fixture: fixtureApiId });
+
+  for (const ts of teamStats) {
+    const teamDbId = teamMap.get(ts.team.id);
+    if (!teamDbId) continue;
+
+    for (const entry of ts.players) {
+      const player = await prisma.player.findUnique({ where: { apiFootballId: entry.player.id } });
+      if (!player) continue;
+
+      const s = entry.statistics[0];
+      if (!s) continue;
+
+      const rating = s.games.rating ? parseFloat(s.games.rating) : null;
+      const passAccuracy = s.passes.accuracy
+        ? parseFloat(String(s.passes.accuracy).replace('%', ''))
+        : null;
+
+      await prisma.playerMatchStats.upsert({
+        where: { matchId_playerId: { matchId, playerId: player.id } },
+        update: {},
+        create: {
+          matchId,
+          playerId:          player.id,
+          teamId:            teamDbId,
+          minutesPlayed:     s.games.minutes,
+          rating:            isNaN(rating!) ? null : rating,
+          captain:           s.games.captain ?? false,
+          substitute:        s.games.substitute ?? false,
+          goals:             s.goals.total ?? 0,
+          goalsConceded:     s.goals.conceded,
+          assists:           s.goals.assists ?? 0,
+          saves:             s.goals.saves,
+          shots:             s.shots.total,
+          shotsOnTarget:     s.shots.on,
+          passes:            s.passes.total,
+          keyPasses:         s.passes.key,
+          passAccuracyPct:   isNaN(passAccuracy!) ? null : passAccuracy,
+          tackles:           s.tackles.total,
+          blockedShots:      s.tackles.blocks,
+          interceptions:     s.tackles.interceptions,
+          duelsTotal:        s.duels.total,
+          duelsWon:          s.duels.won,
+          dribbles:          s.dribbles.attempts,
+          dribblesCompleted: s.dribbles.success,
+          dribblesPast:      s.dribbles.past,
+          foulsCommitted:    s.fouls.committed,
+          foulsSuffered:     s.fouls.drawn,
+          yellowCards:       s.cards.yellow ?? 0,
+          redCards:          s.cards.red ?? 0,
+          offsides:          s.offsides,
+          penaltyWon:        s.penalty.won,
+          penaltyCommitted:  s.penalty.commited,
+          penaltyScored:     s.penalty.scored,
+          penaltyMissed:     s.penalty.missed,
+          penaltySaved:      s.penalty.saved,
+        },
+      });
+    }
   }
 }
