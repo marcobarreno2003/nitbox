@@ -1,0 +1,59 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: nitbox_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-nitbox}
+      POSTGRES_USER:     ${POSTGRES_USER:-nitbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nitbox}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # NestJS API
+  # Scale with: docker compose up -d --scale api=3
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: nitbox_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL:      postgresql://${POSTGRES_USER:-nitbox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nitbox}
+      API_FOOTBALL_KEY:  ${API_FOOTBALL_KEY}
+      API_PORT:          3001
+      NODE_ENV:          production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No ports exposed directly — nginx proxies to this service
+
+  # ---------------------------------------------------------------------------
+  # Nginx reverse proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nitbox_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  nginx_logs:

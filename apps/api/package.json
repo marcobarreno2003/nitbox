@@ -6,6 +6,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint \"{src}/**/*.ts\"",
     "clean": "rm -rf dist",
     "seed": "ts-node -r tsconfig-paths/register prisma/seed/index.ts",

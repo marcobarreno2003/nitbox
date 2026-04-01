@@ -11,66 +11,63 @@ export class MatchesService {
     private readonly config: ConfigService,
   ) {}
 
-  findAll(teamId?: number) {
+  findAll(teamId?: number, season?: number, competitionId?: number, status?: string, limit = 20) {
     return this.prisma.match.findMany({
-      where: teamId
-        ? { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] }
-        : undefined,
+      where: {
+        ...(teamId        ? { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] } : {}),
+        ...(status        ? { statusShort: status }                                   : {}),
+        ...(season        ? { competitionSeason: { apiFootballSeason: season } }      : {}),
+        ...(competitionId ? { competitionSeason: { competitionId } }                  : {}),
+      },
       include: {
-        homeTeam: true,
-        awayTeam: true,
-        competitionSeason: {
-          include: { competition: true },
-        },
+        homeTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        awayTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        competitionSeason: { include: { competition: true } },
       },
       orderBy: { kickoffAt: 'desc' },
+      take: limit,
     })
   }
 
   async findLive() {
     const apiKey = this.config.get<string>('API_FOOTBALL_KEY')
 
-    // Get all 60 national teams for filtering
     const teams = await this.prisma.nationalTeam.findMany({
       select: { id: true, name: true, apiFootballId: true, fifaCode: true, logoUrl: true },
     })
     const teamByApiId = new Map(teams.map(t => [t.apiFootballId, t]))
     const teamApiIds  = new Set(teams.map(t => t.apiFootballId))
 
-    const res  = await fetch(`${API_FOOTBALL_BASE}/fixtures?live=all`, {
+    const res = await fetch(`${API_FOOTBALL_BASE}/fixtures?live=all`, {
       headers: { 'x-apisports-key': apiKey! },
-      // Node 18+ native fetch — no cache so each call is fresh
-      cache: 'no-store' as RequestCache,
     })
-
     if (!res.ok) return []
 
     const json     = await res.json() as { response: any[] }
     const fixtures = json.response ?? []
 
-    // Keep only matches where BOTH teams are in our 60
     const live = fixtures.filter(
       f => teamApiIds.has(f.teams.home.id) && teamApiIds.has(f.teams.away.id),
     )
 
     return live.map(f => ({
-      fixtureId:  f.fixture.id,
-      homeTeam:   teamByApiId.get(f.teams.home.id),
-      awayTeam:   teamByApiId.get(f.teams.away.id),
-      homeScore:  f.goals.home as number | null,
-      awayScore:  f.goals.away as number | null,
-      minute:     f.fixture.status.elapsed as number | null,
+      fixtureId: f.fixture.id,
+      homeTeam:  teamByApiId.get(f.teams.home.id),
+      awayTeam:  teamByApiId.get(f.teams.away.id),
+      homeScore: f.goals.home  as number | null,
+      awayScore: f.goals.away  as number | null,
+      minute:    f.fixture.status.elapsed as number | null,
       status: {
-        short:   f.fixture.status.short  as string,
-        long:    f.fixture.status.long   as string,
+        short:   f.fixture.status.short   as string,
+        long:    f.fixture.status.long    as string,
         elapsed: f.fixture.status.elapsed as number | null,
-        extra:   f.fixture.status.extra  as number | null,
+        extra:   f.fixture.status.extra   as number | null,
       },
       competition: {
-        apiId:  f.league.id    as number,
-        name:   f.league.name  as string,
-        logo:   f.league.logo  as string,
-        round:  f.league.round as string,
+        apiId:  f.league.id     as number,
+        name:   f.league.name   as string,
+        logo:   f.league.logo   as string,
+        round:  f.league.round  as string,
         season: f.league.season as number,
       },
       kickoffAt: f.fixture.date as string,
@@ -81,15 +78,68 @@ export class MatchesService {
     const match = await this.prisma.match.findUnique({
       where: { id },
       include: {
-        homeTeam: true,
-        awayTeam: true,
-        competitionSeason: {
-          include: { competition: true },
-        },
-        teamStatistics: true,
+        homeTeam:          { include: { country: true } },
+        awayTeam:          { include: { country: true } },
+        venue:             true,
+        competitionSeason: { include: { competition: true } },
+        teamStatistics:    true,
       },
     })
     if (!match) throw new NotFoundException(`Match ${id} not found`)
     return match
+  }
+
+  async findLineups(id: number) {
+    await this.assertExists(id)
+    return this.prisma.matchLineup.findMany({
+      where: { matchId: id },
+      include: {
+        team:  { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        coach: { select: { id: true, firstName: true, lastName: true, photoUrl: true } },
+        lineupPlayers: {
+          include: {
+            player: {
+              select: { id: true, firstName: true, lastName: true, commonName: true, photoUrl: true },
+            },
+          },
+          orderBy: [{ isStarter: 'desc' }, { shirtNumber: 'asc' }],
+        },
+      },
+    })
+  }
+
+  async findEvents(id: number) {
+    await this.assertExists(id)
+    return this.prisma.matchEvent.findMany({
+      where: { matchId: id },
+      include: {
+        team:         { select: { id: true, name: true, fifaCode: true } },
+        player:       { select: { id: true, firstName: true, lastName: true, commonName: true } },
+        assistPlayer: { select: { id: true, firstName: true, lastName: true, commonName: true } },
+      },
+      orderBy: { minute: 'asc' },
+    })
+  }
+
+  async findPlayerStats(id: number) {
+    await this.assertExists(id)
+    return this.prisma.playerMatchStats.findMany({
+      where: { matchId: id },
+      include: {
+        player: {
+          select: {
+            id: true, firstName: true, lastName: true, commonName: true,
+            position: true, photoUrl: true,
+          },
+        },
+        team: { select: { id: true, name: true, fifaCode: true } },
+      },
+      orderBy: [{ team: { name: 'asc' } }, { minutesPlayed: 'desc' }],
+    })
+  }
+
+  private async assertExists(id: number) {
+    const match = await this.prisma.match.findUnique({ where: { id }, select: { id: true } })
+    if (!match) throw new NotFoundException(`Match ${id} not found`)
   }
 }

@@ -77,6 +77,11 @@ export async function seedCoaches(prisma: PrismaClient) {
         : null;
 
       // Upsert the coach profile
+      // Some coaches return null for firstname/lastname — fall back to splitting name
+      const nameParts = (apiCoach.name ?? '').split(' ');
+      const firstName = apiCoach.firstname ?? (nameParts.slice(0, -1).join(' ') || apiCoach.name || 'Unknown');
+      const lastName  = apiCoach.lastname  ?? (nameParts.slice(-1)[0] ?? '');
+
       const coach = await prisma.coach.upsert({
         where: { apiFootballId: apiCoach.id },
         update: {
@@ -87,8 +92,8 @@ export async function seedCoaches(prisma: PrismaClient) {
         },
         create: {
           apiFootballId:  apiCoach.id,
-          firstName:      apiCoach.firstname,
-          lastName:       apiCoach.lastname,
+          firstName,
+          lastName,
           dateOfBirth:    apiCoach.birth.date ? new Date(apiCoach.birth.date) : null,
           birthPlace:     apiCoach.birth.place ?? null,
           birthCountryId,

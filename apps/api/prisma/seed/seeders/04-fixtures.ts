@@ -364,8 +364,8 @@ async function seedMatchLineups(
     });
 
     const allPlayers = [
-      ...lineup.startXI.map(e => ({ ...e.player, isStarter: true })),
-      ...lineup.substitutes.map(e => ({ ...e.player, isStarter: false })),
+      ...(lineup.startXI    ?? []).map(e => ({ ...e.player, isStarter: true })),
+      ...(lineup.substitutes ?? []).map(e => ({ ...e.player, isStarter: false })),
     ];
 
     for (const lp of allPlayers) {
