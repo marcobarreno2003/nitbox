@@ -103,6 +103,7 @@ export async function seedStandings(prisma: PrismaClient) {
 
         // Prisma upsert does not support null in compound unique keys
         // so we use findFirst + create/update pattern
+        // Some competitions (e.g. Asian Cup) don't return home/away breakdown — default to 0
         const standingData = {
           position:         row.rank,
           form:             row.form,
@@ -116,18 +117,18 @@ export async function seedStandings(prisma: PrismaClient) {
           lost:             row.all.lose,
           goalsFor:         row.all.goals.for,
           goalsAgainst:     row.all.goals.against,
-          homePlayed:       row.home.played,
-          homeWon:          row.home.win,
-          homeDrawn:        row.home.draw,
-          homeLost:         row.home.lose,
-          homeGoalsFor:     row.home.goals.for,
-          homeGoalsAgainst: row.home.goals.against,
-          awayPlayed:       row.away.played,
-          awayWon:          row.away.win,
-          awayDrawn:        row.away.draw,
-          awayLost:         row.away.lose,
-          awayGoalsFor:     row.away.goals.for,
-          awayGoalsAgainst: row.away.goals.against,
+          homePlayed:       row.home?.played       ?? 0,
+          homeWon:          row.home?.win          ?? 0,
+          homeDrawn:        row.home?.draw         ?? 0,
+          homeLost:         row.home?.lose         ?? 0,
+          homeGoalsFor:     row.home?.goals?.for   ?? 0,
+          homeGoalsAgainst: row.home?.goals?.against ?? 0,
+          awayPlayed:       row.away?.played       ?? 0,
+          awayWon:          row.away?.win          ?? 0,
+          awayDrawn:        row.away?.draw         ?? 0,
+          awayLost:         row.away?.lose         ?? 0,
+          awayGoalsFor:     row.away?.goals?.for   ?? 0,
+          awayGoalsAgainst: row.away?.goals?.against ?? 0,
         };
 
         const existing = await prisma.standing.findFirst({
@@ -138,7 +139,11 @@ export async function seedStandings(prisma: PrismaClient) {
           await prisma.standing.update({ where: { id: existing.id }, data: standingData });
         } else {
           await prisma.standing.create({
-            data: { competitionSeasonId: seasonId, groupId: null, teamId: teamDbId, ...standingData },
+            data: {
+              competitionSeason: { connect: { id: seasonId } },
+              team:              { connect: { id: teamDbId } },
+              ...standingData,
+            },
           });
         }
 
