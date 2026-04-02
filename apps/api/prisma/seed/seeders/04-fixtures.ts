@@ -206,17 +206,18 @@ export async function seedFixtures(prisma: PrismaClient) {
         },
       });
 
-      // Fetch & upsert match statistics (1 request per match — budget carefully)
-      await seedMatchStats(prisma, match.id, f.fixture.id, homeDbId, awayDbId);
-
-      // Fetch & upsert match events
-      await seedMatchEvents(prisma, match.id, f.fixture.id, teamMap);
-
-      // Fetch & upsert match lineups + lineup players
-      await seedMatchLineups(prisma, match.id, f.fixture.id, teamMap);
-
-      // Fetch & upsert player match stats
-      await seedMatchPlayerStats(prisma, match.id, f.fixture.id, teamMap);
+      try {
+        await seedMatchStats(prisma, match.id, f.fixture.id, homeDbId, awayDbId);
+        await seedMatchEvents(prisma, match.id, f.fixture.id, teamMap);
+        await seedMatchLineups(prisma, match.id, f.fixture.id, teamMap);
+        await seedMatchPlayerStats(prisma, match.id, f.fixture.id, teamMap);
+      } catch (err: any) {
+        // Re-throw rate limit errors so the orchestrator can stop gracefully
+        if (err?.name === 'DailyLimitError') throw err;
+        // Log and skip this fixture — it can be retried next run
+        console.warn(`    [WARN] fixture ${f.fixture.id} failed: ${err?.message ?? err}`);
+        continue;
+      }
 
       console.log(`    [OK] ${f.teams.home.name} ${f.score.fulltime.home}-${f.score.fulltime.away} ${f.teams.away.name}`);
     }
@@ -369,6 +370,7 @@ async function seedMatchLineups(
     ];
 
     for (const lp of allPlayers) {
+      if (!lp.id) continue; // API sometimes returns null player id
       const player = await prisma.player.findUnique({ where: { apiFootballId: lp.id } });
       if (!player) continue;
 
