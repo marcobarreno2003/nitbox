@@ -16,6 +16,14 @@ export class PlayersController {
     return this.playersService.findOne(id)
   }
 
+  @Get(':id/rating')
+  @ApiOperation({ summary: 'Player attribute ratings (PAC/SHO/PAS/DRI/DEF/PHY)' })
+  @ApiParam({ name: 'id', description: 'NITBox player ID' })
+  @ApiResponse({ status: 200, description: 'Percentile-based attribute ratings from ML service.' })
+  findRating(@Param('id', ParseIntPipe) id: number) {
+    return this.playersService.findRating(id)
+  }
+
   @Get(':id/stats')
   @ApiOperation({ summary: 'Player season statistics' })
   @ApiParam({ name: 'id', description: 'NITBox player ID' })

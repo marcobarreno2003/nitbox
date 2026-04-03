@@ -107,6 +107,15 @@ export async function seedPlayers(prisma: PrismaClient) {
     const profileMap = new Map<number, ApiPlayerResponse>();
     playerProfiles.forEach(p => profileMap.set(p.player.id, p));
 
+    // Create the squad marker first so we can link players to it
+    const squad = await prisma.squad.create({
+      data: {
+        teamId:              team.id,
+        competitionSeasonId: null,
+        label:               'Current Squad',
+      },
+    });
+
     for (const sp of squadPlayers) {
       const profile = profileMap.get(sp.id);
       const p = profile?.player;
@@ -119,7 +128,7 @@ export async function seedPlayers(prisma: PrismaClient) {
         ? (countryMap.get(p.birth.country) ?? null)
         : null;
 
-      await prisma.player.upsert({
+      const player = await prisma.player.upsert({
         where: { apiFootballId: sp.id },
         update: {
           commonName: p?.name ?? sp.name,
@@ -147,16 +156,18 @@ export async function seedPlayers(prisma: PrismaClient) {
           weightKg:       parseCm(p?.weight ?? null),
         },
       });
-    }
 
-    // Mark squad as seeded
-    await prisma.squad.create({
-      data: {
-        teamId:              team.id,
-        competitionSeasonId: null,
-        label:               'Current Squad',
-      },
-    });
+      // Link player to squad
+      await prisma.squadPlayer.upsert({
+        where: { squadId_playerId: { squadId: squad.id, playerId: player.id } },
+        update: { shirtNumber: sp.number },
+        create: {
+          squadId:     squad.id,
+          playerId:    player.id,
+          shirtNumber: sp.number,
+        },
+      });
+    }
 
     console.log(`    [OK] ${squadPlayers.length} players upserted`);
   }

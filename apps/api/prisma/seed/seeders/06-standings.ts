@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
-import { apiGet } from '../api';
+import { apiGet, apiGetOne } from '../api';
 import { SEASONS } from '../config';
 
 interface ApiStanding {
@@ -80,26 +80,30 @@ export async function seedStandings(prisma: PrismaClient) {
 
     console.log(`\n  ${cs.competition.shortName} ${season}`);
 
-    // Skip if standings already exist for this competition+season
+    // Check if standings exist — skip API call but still run seedTeamSeasonStats
     const existingStandings = await prisma.standing.count({ where: { competitionSeasonId: seasonId } });
-    if (existingStandings > 0) {
-      console.log(`    [SKIP] Already have ${existingStandings} standings`);
-      continue;
+    const standingsAlreadySeeded = existingStandings > 0;
+
+    if (!standingsAlreadySeeded) {
+      console.log(`    Fetching standings...`);
     }
 
-    const results = await apiGet<ApiStandingsResponse>('standings', {
-      league: leagueId,
-      season,
-    });
+    // Fetch standings from API only if not yet seeded
+    const apiResults = standingsAlreadySeeded
+      ? null
+      : await apiGet<ApiStandingsResponse>('standings', { league: leagueId, season });
 
-    if (!results.length) continue;
+    if (!standingsAlreadySeeded && (!apiResults || !apiResults.length)) continue;
 
-    const allGroups = results[0].league.standings;
+    // Use API data or fall back to existing DB standings for teamSeasonStats
+    const allGroups = apiResults ? apiResults[0].league.standings : null;
 
-    for (const group of allGroups) {
-      for (const row of group) {
-        const teamDbId = teamMap.get(row.team.id);
-        if (!teamDbId) continue;
+    // If standings need to be written from API data
+    if (allGroups) {
+      for (const group of allGroups) {
+        for (const row of group) {
+          const teamDbId = teamMap.get(row.team.id);
+          if (!teamDbId) continue;
 
         // Prisma upsert does not support null in compound unique keys
         // so we use findFirst + create/update pattern
@@ -147,10 +151,23 @@ export async function seedStandings(prisma: PrismaClient) {
           });
         }
 
-        // Fetch team season stats
-        await seedTeamSeasonStats(prisma, teamDbId, row.team.id, leagueId, season, seasonId);
+          // Fetch team season stats
+          await seedTeamSeasonStats(prisma, teamDbId, row.team.id, leagueId, season, seasonId);
 
-        console.log(`    [OK] ${row.rank}. ${row.team.name} — ${row.points} pts`);
+          console.log(`    [OK] ${row.rank}. ${row.team.name} — ${row.points} pts`);
+        }
+      }
+    }
+
+    // If standings were already in DB, still run seedTeamSeasonStats using existing standings
+    if (standingsAlreadySeeded) {
+      console.log(`    [SKIP standings] Already seeded — running team season stats only`);
+      const existingRows = await prisma.standing.findMany({
+        where: { competitionSeasonId: seasonId },
+        include: { team: { select: { id: true, apiFootballId: true } } },
+      });
+      for (const row of existingRows) {
+        await seedTeamSeasonStats(prisma, row.teamId, row.team.apiFootballId, leagueId, season, seasonId);
       }
     }
   }
@@ -170,14 +187,13 @@ async function seedTeamSeasonStats(
   });
   if (existingStats) return;
 
-  const results = await apiGet<ApiTeamStats>('teams/statistics', {
+  const s = await apiGetOne<ApiTeamStats>('teams/statistics', {
     team:   teamApiId,
     league: leagueId,
     season,
   });
 
-  if (!results.length) return;
-  const s = results[0];
+  if (!s || !s.fixtures) return;
 
   await prisma.teamSeasonStats.upsert({
     where: { teamId_competitionSeasonId: { teamId: teamDbId, competitionSeasonId: seasonId } },
