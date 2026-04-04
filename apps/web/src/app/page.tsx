@@ -1,14 +1,13 @@
 import Link from 'next/link'
 import LiveBanner from '@/components/LiveBanner'
+import { apiFetch, formatDate, statusLabel, type Match } from '@/lib/api'
 
-// Placeholder data — se reemplaza con fetch al API cuando los seeds esten listos
-const recentMatches = [
-  { id: 1, homeTeam: 'Argentina', awayTeam: 'Bolivia',  homeScore: 3, awayScore: 0, competition: 'WCQ CONMEBOL', date: 'Mar 25, 2025' },
-  { id: 2, homeTeam: 'Brazil',    awayTeam: 'Colombia', homeScore: 1, awayScore: 1, competition: 'WCQ CONMEBOL', date: 'Mar 25, 2025' },
-  { id: 3, homeTeam: 'France',    awayTeam: 'Croatia',  homeScore: 2, awayScore: 0, competition: 'WCQ UEFA',     date: 'Mar 24, 2025' },
-  { id: 4, homeTeam: 'Spain',     awayTeam: 'Denmark',  homeScore: 3, awayScore: 1, competition: 'WCQ UEFA',     date: 'Mar 24, 2025' },
-  { id: 5, homeTeam: 'Morocco',   awayTeam: 'Senegal',  homeScore: 1, awayScore: 0, competition: 'WCQ CAF',      date: 'Mar 23, 2025' },
-]
+export const revalidate = 120
+
+async function getRecentMatches(): Promise<Match[]> {
+  const data = await apiFetch<Match[]>('/matches?limit=5', 120)
+  return data ?? []
+}
 
 const featuredStats = [
   {
@@ -52,7 +51,8 @@ const latestArticles = [
   },
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  const recentMatches = await getRecentMatches()
   return (
     <div className="max-w-7xl mx-auto px-6 py-16 space-y-24">
 
@@ -98,22 +98,47 @@ export default function HomePage() {
           </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {recentMatches.map((match) => (
-            <div
+          {recentMatches.length === 0 ? (
+            <p className="text-text-muted text-sm col-span-5">No recent matches found.</p>
+          ) : recentMatches.map((match) => (
+            <Link
               key={match.id}
-              className="bg-surface border border-border rounded-xl p-4 space-y-3 hover:border-accent/40 transition-colors cursor-pointer"
+              href={`/matches/${match.id}`}
+              className="bg-surface border border-border rounded-xl p-4 space-y-3 hover:border-accent/40 transition-colors block"
             >
-              <p className="text-text-muted text-xs">{match.competition}</p>
+              <p className="text-text-muted text-xs truncate">
+                {match.competitionSeason.competition.name}
+              </p>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-text-primary truncate">{match.homeTeam}</span>
-                <span className="text-accent font-bold text-sm shrink-0">{match.homeScore}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {match.homeTeam.logoUrl && (
+                    <img src={match.homeTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
+                  )}
+                  <span className="text-sm font-semibold text-text-primary truncate">
+                    {match.homeTeam.fifaCode ?? match.homeTeam.name}
+                  </span>
+                </div>
+                <span className="text-accent font-bold text-sm shrink-0 tabular-nums">
+                  {match.homeScore ?? '–'}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-text-primary truncate">{match.awayTeam}</span>
-                <span className="text-text-muted font-bold text-sm shrink-0">{match.awayScore}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {match.awayTeam.logoUrl && (
+                    <img src={match.awayTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
+                  )}
+                  <span className="text-sm font-medium text-text-muted truncate">
+                    {match.awayTeam.fifaCode ?? match.awayTeam.name}
+                  </span>
+                </div>
+                <span className="text-text-muted font-bold text-sm shrink-0 tabular-nums">
+                  {match.awayScore ?? '–'}
+                </span>
               </div>
-              <p className="text-text-muted text-xs pt-1 border-t border-border">{match.date}</p>
-            </div>
+              <p className="text-text-muted text-xs pt-1 border-t border-border">
+                {formatDate(match.kickoffAt)} · {statusLabel(match)}
+              </p>
+            </Link>
           ))}
         </div>
       </section>
