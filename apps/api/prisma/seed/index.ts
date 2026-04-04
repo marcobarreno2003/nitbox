@@ -26,6 +26,7 @@ import { seedPlayers }           from './seeders/05-players';
 import { seedStandings }         from './seeders/06-standings';
 import { seedPlayerSeasonStats } from './seeders/07-player-season-stats';
 import { seedCoaches }           from './seeders/08-coaches';
+import { seedFriendlies }        from './seeders/09-friendlies';
 
 const prisma = new PrismaClient();
 
@@ -43,6 +44,7 @@ async function main() {
     if (run('competitions'))        await seedCompetitions(prisma);
     if (run('players'))             await seedPlayers(prisma);
     if (run('fixtures'))            await seedFixtures(prisma);
+    if (run('friendlies'))          await seedFriendlies(prisma);
     if (run('standings'))           await seedStandings(prisma);
     if (run('player-season-stats')) await seedPlayerSeasonStats(prisma);
     if (run('coaches'))             await seedCoaches(prisma);

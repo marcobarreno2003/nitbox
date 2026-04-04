@@ -31,6 +31,18 @@ export class MatchesController {
     )
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'Search matches', description: 'Full-text search on team names, FIFA codes, and competition names.' })
+  @ApiQuery({ name: 'q',     required: true,  description: 'Search query (team name, FIFA code, competition)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Max results (default 20)' })
+  @ApiResponse({ status: 200, description: 'Matching matches ordered by date.' })
+  search(
+    @Query('q')     q?:     string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.matchesService.search(q ?? '', limit ? Number(limit) : 20)
+  }
+
   @Get('live')
   @ApiOperation({ summary: 'Live matches', description: 'Real-time live matches involving our 60 teams.' })
   @ApiResponse({ status: 200, description: 'Live matches. Empty array if none in progress.' })

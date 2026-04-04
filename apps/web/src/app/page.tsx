@@ -109,32 +109,43 @@ export default async function HomePage() {
               <p className="text-text-muted text-xs truncate">
                 {match.competitionSeason.competition.name}
               </p>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  {match.homeTeam.logoUrl && (
-                    <img src={match.homeTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
-                  )}
-                  <span className="text-sm font-semibold text-text-primary truncate">
-                    {match.homeTeam.fifaCode ?? match.homeTeam.name}
-                  </span>
-                </div>
-                <span className="text-accent font-bold text-sm shrink-0 tabular-nums">
-                  {match.homeScore ?? '–'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  {match.awayTeam.logoUrl && (
-                    <img src={match.awayTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
-                  )}
-                  <span className="text-sm font-medium text-text-muted truncate">
-                    {match.awayTeam.fifaCode ?? match.awayTeam.name}
-                  </span>
-                </div>
-                <span className="text-text-muted font-bold text-sm shrink-0 tabular-nums">
-                  {match.awayScore ?? '–'}
-                </span>
-              </div>
+              {(() => {
+                const hs = match.homeScore
+                const as_ = match.awayScore
+                const hasScore = hs !== null && as_ !== null
+                const homeWin = hasScore && hs! > as_!
+                const awayWin = hasScore && as_! > hs!
+                return (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {match.homeTeam.logoUrl && (
+                          <img src={match.homeTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
+                        )}
+                        <span className={`text-sm font-semibold truncate ${homeWin ? 'text-text-primary' : 'text-text-muted'}`}>
+                          {match.homeTeam.fifaCode ?? match.homeTeam.name}
+                        </span>
+                      </div>
+                      <span className={`text-sm shrink-0 tabular-nums ${homeWin ? 'text-text-primary font-black' : 'text-text-muted font-bold'}`}>
+                        {hasScore ? hs : '–'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {match.awayTeam.logoUrl && (
+                          <img src={match.awayTeam.logoUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
+                        )}
+                        <span className={`text-sm font-semibold truncate ${awayWin ? 'text-text-primary' : 'text-text-muted'}`}>
+                          {match.awayTeam.fifaCode ?? match.awayTeam.name}
+                        </span>
+                      </div>
+                      <span className={`text-sm shrink-0 tabular-nums ${awayWin ? 'text-text-primary font-black' : 'text-text-muted font-bold'}`}>
+                        {hasScore ? as_ : '–'}
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
               <p className="text-text-muted text-xs pt-1 border-t border-border">
                 {formatDate(match.kickoffAt)} · {statusLabel(match)}
               </p>

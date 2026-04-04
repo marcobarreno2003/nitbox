@@ -48,7 +48,9 @@ export interface Match {
 export interface LineupPlayer {
   id: number
   shirtNumber: number | null
-  position: string | null
+  position: string | null       // deprecated, use positionCode
+  positionCode: string | null   // G / D / M / F
+  gridPosition: string | null   // "row:col"
   isStarter: boolean
   player: {
     id: number

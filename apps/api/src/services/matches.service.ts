@@ -11,6 +11,30 @@ export class MatchesService {
     private readonly config: ConfigService,
   ) {}
 
+  search(q: string, limit = 20) {
+    const term = q.trim()
+    if (!term) return Promise.resolve([])
+    return this.prisma.match.findMany({
+      where: {
+        OR: [
+          { homeTeam: { name:     { contains: term, mode: 'insensitive' } } },
+          { awayTeam: { name:     { contains: term, mode: 'insensitive' } } },
+          { homeTeam: { fifaCode: { contains: term, mode: 'insensitive' } } },
+          { awayTeam: { fifaCode: { contains: term, mode: 'insensitive' } } },
+          { competitionSeason: { competition: { name:      { contains: term, mode: 'insensitive' } } } },
+          { competitionSeason: { competition: { shortName: { contains: term, mode: 'insensitive' } } } },
+        ],
+      },
+      include: {
+        homeTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        awayTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        competitionSeason: { include: { competition: true } },
+      },
+      orderBy: { kickoffAt: 'desc' },
+      take: limit,
+    })
+  }
+
   findAll(teamId?: number, season?: number, competitionId?: number, status?: string, limit = 20) {
     return this.prisma.match.findMany({
       where: {
