@@ -159,6 +159,7 @@ model CompetitionSeason {
   playerSeasonStats PlayerSeasonStats[]
   trophies          Trophy[]
   squads            Squad[]
+  nitboxAwards      NitboxAward[]
 
   @@unique([competitionId, label])
   @@map("competition_seasons")
@@ -315,6 +316,7 @@ model Player {
   playerSeasonStats PlayerSeasonStats[]
   lineupPlayers     LineupPlayer[]
   injuries          PlayerInjury[]
+  nitboxAwards      NitboxAward[]
 
   @@map("players")
 }
@@ -357,6 +359,21 @@ model SquadPlayer {
 
   @@unique([squadId, playerId])
   @@map("squad_players")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+// Tracks how far along the data-pipeline a match has progressed.
+// Set internally by LiveSyncService / PreMatchService / EnrichService.
+enum EnrichStatus {
+  SCHEDULED           // Match exists in DB; no lineup data yet
+  LINEUPS_CONFIRMED   // Pre-match lineups seeded (≥ 45 min before KO)
+  LIVE                // Match currently in progress — live polling active
+  FULLY_ENRICHED      // Events + player stats + final lineups all seeded
+
+  @@map("enrich_status")
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +424,9 @@ model Match {
   homePenScore          Int?                                    // score.penalty.home
   awayPenScore          Int?                                    // score.penalty.away
 
+  // Pipeline tracking — managed by LiveSyncService / PreMatchService / EnrichService
+  enrichStatus          EnrichStatus @default(SCHEDULED)
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -414,6 +434,7 @@ model Match {
   events         MatchEvent[]
   lineups        MatchLineup[]
   playerStats    PlayerMatchStats[]
+  nitboxAwards   NitboxAward[]
 
   @@map("matches")
 }
@@ -776,4 +797,38 @@ model PlayerInjury {
   updatedAt      DateTime  @updatedAt
 
   @@map("player_injuries")
+}
+
+// ---------------------------------------------------------------------------
+// NITBOX AWARDS
+// ---------------------------------------------------------------------------
+// Algorithmically calculated awards. score is the computed metric that won it.
+// matchId is set for per-match awards; competitionSeasonId for season awards.
+
+enum NitboxAwardType {
+  PLAYER_OF_MATCH      // Highest weighted score in a single match
+  PLAYER_OF_SEASON     // Best overall season rating across competition
+  PLAYER_OF_CUP        // Best performer across all rounds of a cup competition
+  BEST_DEFENSIVE       // Highest combined defensive actions across season
+
+  @@map("nitbox_award_type")
+}
+
+model NitboxAward {
+  id                    Int              @id @default(autoincrement())
+  type                  NitboxAwardType
+  playerId              Int
+  player                Player           @relation(fields: [playerId], references: [id])
+  matchId               Int?             // Set for PLAYER_OF_MATCH only
+  match                 Match?           @relation(fields: [matchId], references: [id])
+  competitionSeasonId   Int?             // Set for season/cup awards
+  competitionSeason     CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
+  seasonYear            Int              // e.g. 2025
+  score                 Float            // The calculated metric value that won the award
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([type, matchId])              // One PLAYER_OF_MATCH per match
+  @@unique([type, competitionSeasonId])  // One season award per competition per type
+  @@map("nitbox_awards")
 }

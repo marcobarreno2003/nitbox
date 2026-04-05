@@ -1,0 +1,47 @@
+name: Seed Calendar
+
+# Runs daily at 3:00 AM UTC.
+# Seeds upcoming NS fixtures for all 60 teams (current + next season)
+# so LiveSyncService and PreMatchService always have matches to watch.
+# Also handles World Cup 2026 fixtures as they are announced.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC every day
+  workflow_dispatch:        # allow manual trigger from GitHub UI
+
+jobs:
+  seed-calendar:
+    name: Seed upcoming fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run seed:calendar
+        working-directory: apps/api
+        run: npm run seed:calendar
+        env:
+          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
+          API_FOOTBALL_KEY:   ${{ secrets.API_FOOTBALL_KEY }}
