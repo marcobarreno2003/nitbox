@@ -1,0 +1,57 @@
+name: Seed Predictions
+
+# Runs daily at 4:00 AM UTC — after seed-matches-finished (2am) and seed-calendar (3am).
+# Starts the FastAPI ML service, triggers model training on fresh data,
+# then calls seed:predictions to populate match_predictions for all upcoming matches.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 04:00 UTC every day
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  seed-predictions:
+    name: Train models + seed predictions
+    runs-on: self-hosted     # runs on the Asus Ubuntu server where FastAPI lives
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Start FastAPI ML service (background)
+        working-directory: apps/ml
+        run: |
+          .venv/bin/uvicorn main:app --host 0.0.0.0 --port 3003 &
+          echo "ML_PID=$!" >> $GITHUB_ENV
+          # Wait for service to be ready
+          sleep 5
+          curl --retry 5 --retry-delay 2 --retry-connrefused http://localhost:3003/health
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run seed:predictions
+        working-directory: apps/api
+        run: npm run seed:predictions
+        env:
+          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+          ML_SERVICE_URL:  http://localhost:3003
+
+      - name: Stop FastAPI ML service
+        if: always()
+        run: kill $ML_PID || true

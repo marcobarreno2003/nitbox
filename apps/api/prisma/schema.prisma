@@ -309,14 +309,15 @@ model Player {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  squadPlayers      SquadPlayer[]
-  matchEvents       MatchEvent[]        @relation("EventPlayer")
-  assistEvents      MatchEvent[]        @relation("EventAssist")
-  playerMatchStats  PlayerMatchStats[]
-  playerSeasonStats PlayerSeasonStats[]
-  lineupPlayers     LineupPlayer[]
-  injuries          PlayerInjury[]
-  nitboxAwards      NitboxAward[]
+  squadPlayers        SquadPlayer[]
+  matchEvents         MatchEvent[]             @relation("EventPlayer")
+  assistEvents        MatchEvent[]             @relation("EventAssist")
+  playerMatchStats    PlayerMatchStats[]
+  playerSeasonStats   PlayerSeasonStats[]
+  lineupPlayers       LineupPlayer[]
+  injuries            PlayerInjury[]
+  nitboxAwards        NitboxAward[]
+  matchPredictions    PlayerMatchPrediction[]
 
   @@map("players")
 }
@@ -430,11 +431,13 @@ model Match {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  teamStatistics MatchTeamStatistics[]
-  events         MatchEvent[]
-  lineups        MatchLineup[]
-  playerStats    PlayerMatchStats[]
-  nitboxAwards   NitboxAward[]
+  teamStatistics     MatchTeamStatistics[]
+  events             MatchEvent[]
+  lineups            MatchLineup[]
+  playerStats        PlayerMatchStats[]
+  nitboxAwards       NitboxAward[]
+  prediction         MatchPrediction?
+  playerPredictions  PlayerMatchPrediction[]
 
   @@map("matches")
 }
@@ -831,4 +834,52 @@ model NitboxAward {
   @@unique([type, matchId])              // One PLAYER_OF_MATCH per match
   @@unique([type, competitionSeasonId])  // One season award per competition per type
   @@map("nitbox_awards")
+}
+
+// ---------------------------------------------------------------------------
+// ML PREDICTIONS
+// ---------------------------------------------------------------------------
+
+// One prediction record per match — stores the winning model's probabilities
+// and all individual model scores for transparency (modelScores JSON).
+model MatchPrediction {
+  id               Int      @id @default(autoincrement())
+  matchId          Int      @unique
+  match            Match    @relation(fields: [matchId], references: [id])
+
+  // Winning model output
+  modelVersion     String   @db.VarChar(50)   // e.g. "gradient_boosting_v1"
+  homeWinProb      Float                       // 0.0 – 1.0
+  drawProb         Float
+  awayWinProb      Float
+  predictedResult  String   @db.VarChar(10)   // "HOME" | "DRAW" | "AWAY"
+  confidence       Float                       // max(homeWinProb, drawProb, awayWinProb)
+
+  // All model scores for display / debugging
+  // Shape: { logistic_regression: 0.71, knn: 0.68, random_forest: 0.74, ... }
+  modelScores      Json
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("match_predictions")
+}
+
+// Per-player predictions for upcoming matches (e.g. expected goals, rating)
+model PlayerMatchPrediction {
+  id               Int      @id @default(autoincrement())
+  matchId          Int
+  match            Match    @relation(fields: [matchId], references: [id])
+  playerId         Int
+  player           Player   @relation(fields: [playerId], references: [id])
+
+  predictedRating  Float?   // Expected rating 1–10
+  predictedGoals   Float?   // Expected goals
+  predictedAssists Float?   // Expected assists
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([matchId, playerId])
+  @@map("player_match_predictions")
 }

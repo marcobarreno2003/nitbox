@@ -26,6 +26,7 @@
 import { PrismaClient } from '@prisma/client';
 import { apiGet, DailyLimitError } from '../api';
 import { TEAMS } from '../config';
+import { enrichMatch } from '../helpers/enrich-match';
 
 interface ApiFixture {
   fixture: {
@@ -191,7 +192,7 @@ export async function seedFriendlies(prisma: PrismaClient) {
         continue;
       }
 
-      // Only finished matches where BOTH teams are in our 60
+          // Only finished matches where BOTH teams are in our 60
       const relevant = fixtures.filter(f =>
         ['FT', 'AET', 'PEN'].includes(f.fixture.status.short) &&
         teamMap.has(f.teams.home.id) &&
@@ -230,7 +231,7 @@ export async function seedFriendlies(prisma: PrismaClient) {
             ? (venueMap.get(f.fixture.venue.id) ?? null)
             : null;
 
-          await prisma.match.upsert({
+          const match = await prisma.match.upsert({
             where:  { apiFootballId: f.fixture.id },
             update: {
               statusShort:   f.fixture.status.short,
@@ -270,9 +271,16 @@ export async function seedFriendlies(prisma: PrismaClient) {
               awayScoreEt:         f.score.extratime.away,
               homePenScore:        f.score.penalty.home,
               awayPenScore:        f.score.penalty.away,
+              enrichStatus:        'SCHEDULED',
             },
-            select: { id: true },
           });
+
+          // Enrich inline — sets FULLY_ENRICHED on success
+          const matchTeamMap = new Map([
+            [f.teams.home.id, homeDbId],
+            [f.teams.away.id, awayDbId],
+          ]);
+          await enrichMatch(prisma, match.id, f.fixture.id, matchTeamMap);
 
           existingFixtureIds.add(f.fixture.id); // prevent duplicate insert in same run
           newCount++;
@@ -288,6 +296,5 @@ export async function seedFriendlies(prisma: PrismaClient) {
   }
 
   console.log(`\n  Friendlies seed complete.`);
-  console.log(`  ${newCount} new matches inserted, ${skipCount} skipped (already in DB).`);
-  console.log(`  Tip: run seed:fixtures to enrich with events / lineups / player stats.`);
+  console.log(`  ${newCount} new matches inserted (enriched inline), ${skipCount} skipped (already in DB).`);
 }

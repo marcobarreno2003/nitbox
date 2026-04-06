@@ -20,6 +20,8 @@
     "seed:friendlies": "ts-node -r tsconfig-paths/register prisma/seed/index.ts friendlies",
     "seed:coaches": "ts-node -r tsconfig-paths/register prisma/seed/index.ts coaches",
     "seed:calendar": "ts-node -r tsconfig-paths/register prisma/seed/index.ts calendar",
+    "seed:matches-finished": "ts-node -r tsconfig-paths/register prisma/seed/index.ts matches-finished",
+    "seed:predictions": "ts-node -r tsconfig-paths/register prisma/seed/index.ts predictions",
     "test:enrich": "ts-node -r tsconfig-paths/register prisma/seed/test-enrich.ts"
   },
   "dependencies": {

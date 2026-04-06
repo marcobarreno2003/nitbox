@@ -53,6 +53,41 @@ export class MatchesService {
     })
   }
 
+  // Returns upcoming (NS / TBD / LINEUPS_CONFIRMED) matches ordered by kickoff date.
+  // Filters: competitionId, teamId, from (ISO date string), to (ISO date string), limit.
+  findUpcoming(
+    competitionId?: number,
+    teamId?:        number,
+    from?:          string,
+    to?:            string,
+    limit = 20,
+  ) {
+    const fromDate = from ? new Date(from) : new Date()
+    const toDate   = to   ? new Date(to)   : undefined
+
+    return this.prisma.match.findMany({
+      where: {
+        statusShort:  { in: ['NS', 'TBD', 'PST'] },
+        enrichStatus: { in: ['SCHEDULED', 'LINEUPS_CONFIRMED'] },
+        kickoffAt: {
+          gte: fromDate,
+          ...(toDate ? { lte: toDate } : {}),
+        },
+        ...(teamId        ? { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] } : {}),
+        ...(competitionId ? { competitionSeason: { competitionId } }                 : {}),
+      },
+      include: {
+        homeTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        awayTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        competitionSeason: { include: { competition: true } },
+        venue:             { select: { id: true, name: true, city: true } },
+        prediction:        true,
+      },
+      orderBy: { kickoffAt: 'asc' },
+      take:    limit,
+    })
+  }
+
   async findLive() {
     const apiKey = this.config.get<string>('API_FOOTBALL_KEY')
 

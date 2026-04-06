@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from routers import ratings
+from routers import ratings, predictions
 
 app = FastAPI(
     title="NITBox ML Service",
     description="Machine learning microservice for football analytics",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -20,8 +20,9 @@ app.add_middleware(
 )
 
 app.include_router(ratings.router)
+app.include_router(predictions.router)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.2.0"}

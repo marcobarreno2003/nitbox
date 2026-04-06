@@ -43,6 +43,30 @@ export class MatchesController {
     return this.matchesService.search(q ?? '', limit ? Number(limit) : 20)
   }
 
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Upcoming matches', description: 'Scheduled matches (NS/TBD) ordered by kickoff date. Includes prediction once Sprint 3 ML is live.' })
+  @ApiQuery({ name: 'competitionId', required: false, description: 'Filter by competition ID' })
+  @ApiQuery({ name: 'teamId',        required: false, description: 'Filter by team ID' })
+  @ApiQuery({ name: 'from',          required: false, description: 'Start date ISO string (default: today)' })
+  @ApiQuery({ name: 'to',            required: false, description: 'End date ISO string' })
+  @ApiQuery({ name: 'limit',         required: false, description: 'Max results (default 20)' })
+  @ApiResponse({ status: 200, description: 'Upcoming matches ordered by kickoff date.' })
+  findUpcoming(
+    @Query('competitionId') competitionId?: string,
+    @Query('teamId')        teamId?:        string,
+    @Query('from')          from?:          string,
+    @Query('to')            to?:            string,
+    @Query('limit')         limit?:         string,
+  ) {
+    return this.matchesService.findUpcoming(
+      competitionId ? Number(competitionId) : undefined,
+      teamId        ? Number(teamId)        : undefined,
+      from,
+      to,
+      limit ? Number(limit) : 20,
+    )
+  }
+
   @Get('live')
   @ApiOperation({ summary: 'Live matches', description: 'Real-time live matches involving our 60 teams.' })
   @ApiResponse({ status: 200, description: 'Live matches. Empty array if none in progress.' })
