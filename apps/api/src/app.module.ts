@@ -8,6 +8,7 @@ import { StandingsModule }    from './routes/standings/standings.module'
 import { PlayersModule }      from './routes/players/players.module'
 import { CompetitionsModule } from './routes/competitions/competitions.module'
 import { AwardsModule }       from './routes/awards/awards.module'
+import { StatsModule }        from './routes/stats/stats.module'
 import { SyncModule }         from './sync/sync.module'
 
 @Module({
@@ -21,6 +22,7 @@ import { SyncModule }         from './sync/sync.module'
     PlayersModule,
     CompetitionsModule,
     AwardsModule,
+    StatsModule,
     SyncModule,
   ],
 })
