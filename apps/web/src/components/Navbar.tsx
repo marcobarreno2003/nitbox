@@ -6,9 +6,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const navLinks = [
-  { label: 'Blog',    href: '/blog' },
-  { label: 'Matches', href: '/matches' },
-  { label: 'Live',    href: '/live' },
+  { label: 'Blog',     href: '/blog' },
+  { label: 'Results',  href: '/matches' },
+  { label: 'Upcoming', href: '/upcoming' },
+  { label: 'Live',     href: '/live' },
 ]
 
 export default function Navbar() {

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import LineupsSection from '@/components/LineupsSection'
+import MatchStatsPanel from '@/components/MatchStatsPanel'
+import PlayerPerformanceTable from '@/components/PlayerPerformanceTable'
 import {
   apiFetch,
   formatDate,
@@ -11,6 +13,7 @@ import {
   type MatchDetail,
   type Lineup,
   type MatchEvent,
+  type PlayerStat,
 } from '@/lib/api'
 
 export const revalidate = 60
@@ -31,6 +34,11 @@ async function getEvents(id: string): Promise<MatchEvent[]> {
   return data ?? []
 }
 
+async function getPlayerStats(id: string): Promise<PlayerStat[]> {
+  const data = await apiFetch<PlayerStat[]>(`/matches/${id}/players`, 3600)
+  return data ?? []
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default async function MatchPage({
@@ -39,10 +47,11 @@ export default async function MatchPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [match, lineups, events] = await Promise.all([
+  const [match, lineups, events, playerStats] = await Promise.all([
     getMatch(id),
     getLineups(id),
     getEvents(id),
+    getPlayerStats(id),
   ])
 
   if (!match) notFound()
@@ -50,13 +59,12 @@ export default async function MatchPage({
   const live     = isLive(match.statusShort)
   const status   = statusLabel(match)
   const hasScore = match.homeScore !== null && match.awayScore !== null
+  const isFinished = ['FT', 'AET', 'PEN'].includes(match.statusShort)
 
   const homeLineup = lineups.find(l => l.team.id === match.homeTeam.id) ?? null
   const awayLineup = lineups.find(l => l.team.id === match.awayTeam.id) ?? null
 
   const goals     = events.filter(e => e.type === 'Goal')
-  const cards     = events.filter(e => e.type === 'Card')
-  const subs      = events.filter(e => e.type === 'subst')
   const allEvents = [...events].sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
 
   return (
@@ -154,8 +162,8 @@ export default async function MatchPage({
         )}
       </div>
 
-      {/* ── Lineups + Events (client component with player modal) ── */}
-      {(homeLineup || awayLineup) && (
+      {/* ── Lineups + Events ── */}
+      {(homeLineup || awayLineup || allEvents.length > 0) && (
         <LineupsSection
           homeLineup={homeLineup}
           awayLineup={awayLineup}
@@ -165,21 +173,24 @@ export default async function MatchPage({
         />
       )}
 
-      {/* ── Stats summary ── */}
-      {(goals.length > 0 || cards.length > 0 || subs.length > 0) && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Goals',         value: goals.length, icon: '⚽' },
-            { label: 'Cards',         value: cards.length, icon: '🟨' },
-            { label: 'Substitutions', value: subs.length,  icon: '🔄' },
-          ].map(stat => (
-            <div key={stat.label} className="bg-surface border border-border rounded-xl p-4 text-center">
-              <p className="text-2xl mb-1">{stat.icon}</p>
-              <p className="text-2xl font-bold text-text-primary">{stat.value}</p>
-              <p className="text-text-muted text-xs">{stat.label}</p>
-            </div>
-          ))}
-        </div>
+      {/* ── Match Stats ── */}
+      {isFinished && match.teamStatistics.length > 0 && (
+        <MatchStatsPanel
+          homeTeamName={match.homeTeam.name}
+          awayTeamName={match.awayTeam.name}
+          stats={match.teamStatistics}
+        />
+      )}
+
+      {/* ── Player Performance ── */}
+      {isFinished && playerStats.length > 0 && (
+        <PlayerPerformanceTable
+          playerStats={playerStats}
+          homeTeamId={match.homeTeam.id}
+          awayTeamId={match.awayTeam.id}
+          homeTeamName={match.homeTeam.name}
+          awayTeamName={match.awayTeam.name}
+        />
       )}
 
     </div>

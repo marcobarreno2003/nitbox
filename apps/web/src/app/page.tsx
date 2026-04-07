@@ -5,7 +5,7 @@ import { apiFetch, formatDate, statusLabel, type Match } from '@/lib/api'
 export const revalidate = 120
 
 async function getRecentMatches(): Promise<Match[]> {
-  const data = await apiFetch<Match[]>('/matches?limit=5', 120)
+  const data = await apiFetch<Match[]>('/matches?limit=5&status=FT', 120)
   return data ?? []
 }
 

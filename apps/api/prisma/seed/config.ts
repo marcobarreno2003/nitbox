@@ -12,13 +12,14 @@ export const COMPETITIONS = [
   { apiFootballId: 9,  name: 'Copa America',                        shortName: 'Copa America',   type: 'continental', confederation: 'CONMEBOL' },
   { apiFootballId: 6,  name: 'Africa Cup of Nations',               shortName: 'AFCON',          type: 'continental', confederation: 'CAF'      },
   { apiFootballId: 7,  name: 'AFC Asian Cup',                       shortName: 'Asian Cup',      type: 'continental', confederation: 'AFC'      },
-  { apiFootballId: 10, name: 'CONCACAF Gold Cup',                   shortName: 'Gold Cup',       type: 'continental', confederation: 'CONCACAF' },
+  { apiFootballId: 22, name: 'CONCACAF Gold Cup',                   shortName: 'Gold Cup',       type: 'continental', confederation: 'CONCACAF' },
   { apiFootballId: 5,  name: 'UEFA Nations League',                 shortName: 'Nations League', type: 'league',      confederation: 'UEFA'     },
-  { apiFootballId: 29, name: 'World Cup Qualification - CONMEBOL',  shortName: 'WCQ CONMEBOL',   type: 'qualifier',   confederation: 'CONMEBOL' },
+  { apiFootballId: 34, name: 'World Cup Qualification - CONMEBOL',  shortName: 'WCQ CONMEBOL',   type: 'qualifier',   confederation: 'CONMEBOL' },
   { apiFootballId: 32, name: 'World Cup Qualification - UEFA',      shortName: 'WCQ UEFA',       type: 'qualifier',   confederation: 'UEFA'     },
-  { apiFootballId: 30, name: 'World Cup Qualification - CAF',       shortName: 'WCQ CAF',        type: 'qualifier',   confederation: 'CAF'      },
-  { apiFootballId: 31, name: 'World Cup Qualification - AFC',       shortName: 'WCQ AFC',        type: 'qualifier',   confederation: 'AFC'      },
-  { apiFootballId: 33, name: 'World Cup Qualification - CONCACAF',  shortName: 'WCQ CONCACAF',   type: 'qualifier',   confederation: 'CONCACAF' },
+  { apiFootballId: 29, name: 'World Cup Qualification - CAF',       shortName: 'WCQ CAF',        type: 'qualifier',   confederation: 'CAF'      },
+  { apiFootballId: 30, name: 'World Cup Qualification - AFC',       shortName: 'WCQ AFC',        type: 'qualifier',   confederation: 'AFC'      },
+  { apiFootballId: 31, name: 'World Cup Qualification - CONCACAF',  shortName: 'WCQ CONCACAF',   type: 'qualifier',   confederation: 'CONCACAF' },
+  { apiFootballId: 33, name: 'World Cup Qualification - OFC',       shortName: 'WCQ OFC',        type: 'qualifier',   confederation: 'OFC'      },
 ];
 
 // Seasons to fetch — always from 2021 up to current year

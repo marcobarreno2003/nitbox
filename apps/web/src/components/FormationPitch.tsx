@@ -7,15 +7,16 @@
 
 interface PitchPlayer {
   id: number
-  shirtNumber: number | null
+  shirtNumber:  number | null
+  positionCode: string | null
   gridPosition: string | null
-  isStarter: boolean
+  isStarter:    boolean
   player: {
-    id: number
-    firstName: string | null
-    lastName: string | null
+    id:         number
+    firstName:  string | null
+    lastName:   string | null
     commonName: string | null
-    photoUrl: string | null
+    photoUrl:   string | null
   }
 }
 
@@ -39,8 +40,35 @@ function initials(p: { firstName?: string | null; lastName?: string | null; comm
   return name.trim().split(' ').map(w => w[0]?.toUpperCase() ?? '').slice(0, 2).join('')
 }
 
+// Derive grid positions from positionCode when gridPosition is missing.
+// Groups G/D/M/F into rows and spaces them evenly within each row.
+function deriveGridPositions(players: PitchPlayer[]): PitchPlayer[] {
+  const ROW_ORDER = ['G', 'D', 'M', 'F']
+  const groups: Record<string, PitchPlayer[]> = { G: [], D: [], M: [], F: [] }
+
+  for (const p of players) {
+    const pos = p.positionCode ?? 'M'
+    const key = ROW_ORDER.includes(pos) ? pos : 'M'
+    groups[key]!.push(p)
+  }
+
+  const result: PitchPlayer[] = []
+  let rowIdx = 1
+  for (const pos of ROW_ORDER) {
+    const group = groups[pos]!
+    if (!group.length) continue
+    group.forEach((p, i) => {
+      result.push({ ...p, gridPosition: `${rowIdx}:${i + 1}` })
+    })
+    rowIdx++
+  }
+  return result
+}
+
 export default function FormationPitch({ formation, players, color = '#1d4ed8', onPlayerClick }: FormationPitchProps) {
-  const starters = players.filter(p => p.isStarter && p.gridPosition)
+  const rawStarters = players.filter(p => p.isStarter)
+  const hasGridData = rawStarters.some(p => p.gridPosition)
+  const starters    = hasGridData ? rawStarters.filter(p => p.gridPosition) : deriveGridPositions(rawStarters)
 
   // Parse "row:col" positions
   const cells = starters.map(p => {

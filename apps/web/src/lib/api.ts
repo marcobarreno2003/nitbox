@@ -86,9 +86,61 @@ export interface MatchEvent {
   assistPlayer: { id: number; firstName: string | null; lastName: string | null; commonName: string | null } | null
 }
 
+export interface TeamStats {
+  isHome:           boolean
+  possessionPct:    number | null
+  shots:            number | null
+  shotsOnTarget:    number | null
+  passAccuracyPct:  number | null
+  corners:          number | null
+  fouls:            number | null
+  yellowCards:      number | null
+  offsides:         number | null
+  saves:            number | null
+}
+
+export interface PlayerStat {
+  id: number
+  player: {
+    id:         number
+    firstName:  string | null
+    lastName:   string | null
+    commonName: string | null
+    position:   string | null
+    photoUrl:   string | null
+  }
+  team: {
+    id:       number
+    name:     string
+    fifaCode: string | null
+  }
+  minutesPlayed:   number | null
+  rating:          number | null
+  goals:           number | null
+  assists:         number | null
+  shotsTotal:      number | null
+  shotsOnTarget:   number | null
+  passesTotal:     number | null
+  passAccuracyPct: number | null
+  tacklesTotal:    number | null
+  duelsWon:        number | null
+  yellowCards:     number | null
+  redCards:        number | null
+  captain:         boolean
+}
+
+export interface MatchPrediction {
+  predictedResult: string
+  homeWinProb:     number
+  drawProb:        number
+  awayWinProb:     number
+  confidence:      number
+  modelVersion:    string
+}
+
 export interface MatchDetail extends Match {
-  venue: { name: string; city: string } | null
-  teamStatistics: any[]
+  venue:          { name: string; city: string; country?: string } | null
+  teamStatistics: TeamStats[]
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
