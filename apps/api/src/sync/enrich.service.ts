@@ -368,7 +368,7 @@ export class EnrichService {
     })
     if (!season) return
 
-    const seasonYear = season.apiFootballSeason
+    const seasonYear: number = season.apiFootballSeason ?? new Date().getFullYear()
 
     // Aggregate player stats across all matches in this competition season
     const playerStats = await this.prisma.playerMatchStats.findMany({

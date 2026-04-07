@@ -45,7 +45,9 @@ async function fetchAwards(type: string, limit = 20): Promise<Award[]> {
   try {
     const res = await fetch(`${API}/awards?type=${type}&limit=${limit}`, { next: { revalidate: 3600 } })
     if (!res.ok) return []
-    return res.json()
+    const text = await res.text()
+    if (!text) return []
+    return JSON.parse(text)
   } catch { return [] }
 }
 
@@ -53,7 +55,9 @@ async function fetchRating(playerId: number) {
   try {
     const res = await fetch(`${API}/players/${playerId}/rating`, { next: { revalidate: 1800 } })
     if (!res.ok) return null
-    return res.json()
+    const text = await res.text()
+    if (!text) return null
+    return JSON.parse(text)
   } catch { return null }
 }
 

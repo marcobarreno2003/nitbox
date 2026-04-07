@@ -73,11 +73,19 @@ interface PlayerProfile {
 
 // ── Fetchers ─────────────────────────────────────────────────────────────────
 
+async function safeJson<T>(res: Response, fallback: T): Promise<T> {
+  try {
+    const text = await res.text()
+    if (!text) return fallback
+    return JSON.parse(text)
+  } catch { return fallback }
+}
+
 async function fetchPlayer(id: string): Promise<PlayerProfile | null> {
   try {
     const res = await fetch(`${API}/players/${id}`, { next: { revalidate: 3600 } })
     if (!res.ok) return null
-    return res.json()
+    return safeJson(res, null)
   } catch { return null }
 }
 
@@ -85,7 +93,7 @@ async function fetchRating(id: string): Promise<PlayerRating | null> {
   try {
     const res = await fetch(`${API}/players/${id}/rating`, { next: { revalidate: 1800 } })
     if (!res.ok) return null
-    return res.json()
+    return safeJson(res, null)
   } catch { return null }
 }
 
@@ -93,7 +101,7 @@ async function fetchStats(id: string): Promise<SeasonStats[]> {
   try {
     const res = await fetch(`${API}/players/${id}/stats`, { next: { revalidate: 3600 } })
     if (!res.ok) return []
-    return res.json()
+    return safeJson(res, [])
   } catch { return [] }
 }
 
