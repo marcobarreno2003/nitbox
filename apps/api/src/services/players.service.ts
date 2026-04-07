@@ -20,6 +20,41 @@ export class PlayersService {
             },
           },
         },
+        // Last 5 match stats ordered by match date
+        playerMatchStats: {
+          take: 5,
+          orderBy: { match: { kickoffAt: 'desc' } },
+          include: {
+            match: {
+              select: {
+                id: true,
+                kickoffAt: true,
+                homeScore: true,
+                awayScore: true,
+                statusShort: true,
+                homeTeam: { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+                awayTeam: { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+                competitionSeason: { include: { competition: { select: { id: true, name: true, shortName: true } } } },
+              },
+            },
+          },
+        },
+        // All awards
+        nitboxAwards: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            match: {
+              select: {
+                id: true, kickoffAt: true,
+                homeTeam: { select: { name: true, fifaCode: true } },
+                awayTeam: { select: { name: true, fifaCode: true } },
+              },
+            },
+            competitionSeason: {
+              include: { competition: { select: { id: true, name: true, shortName: true } } },
+            },
+          },
+        },
       },
     })
     if (!player) throw new NotFoundException(`Player ${id} not found`)
@@ -35,7 +70,7 @@ export class PlayersService {
       if (!res.ok) return null
       return res.json()
     } catch {
-      return null   // ML service is optional — degrade gracefully
+      return null
     }
   }
 

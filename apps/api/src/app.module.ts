@@ -7,6 +7,7 @@ import { MatchesModule }      from './routes/matches/matches.module'
 import { StandingsModule }    from './routes/standings/standings.module'
 import { PlayersModule }      from './routes/players/players.module'
 import { CompetitionsModule } from './routes/competitions/competitions.module'
+import { AwardsModule }       from './routes/awards/awards.module'
 import { SyncModule }         from './sync/sync.module'
 
 @Module({
@@ -19,6 +20,7 @@ import { SyncModule }         from './sync/sync.module'
     StandingsModule,
     PlayersModule,
     CompetitionsModule,
+    AwardsModule,
     SyncModule,
   ],
 })

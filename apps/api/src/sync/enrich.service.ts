@@ -63,6 +63,9 @@ export class EnrichService {
       // Calculate NitboxAward PLAYER_OF_MATCH
       await this.calculatePlayerOfMatch(matchId)
 
+      // Recalculate season-level awards for this competition
+      await this.calculateSeasonAwards(match.competitionSeasonId)
+
       await this.prisma.match.update({
         where: { id: matchId },
         data: { enrichStatus: 'FULLY_ENRICHED' },
@@ -348,5 +351,109 @@ export class EnrichService {
     })
 
     this.logger.log(`NitboxAward PLAYER_OF_MATCH for match ${matchId} → player ${topPlayerId} (score ${topScore.toFixed(1)})`)
+  }
+
+  // ── NitboxAward: Player of the Season ─────────────────────────────────────
+  // Best average API rating across all matches in a competition season.
+  // Minimum 3 appearances required.
+
+  // ── NitboxAward: Best Defensive Player ───────────────────────────────────
+  // Highest combined defensive actions (tackles + interceptions + clearances)
+  // per 90 minutes across a competition season.
+
+  private async calculateSeasonAwards(competitionSeasonId: number) {
+    const season = await this.prisma.competitionSeason.findUnique({
+      where: { id: competitionSeasonId },
+      select: { apiFootballSeason: true },
+    })
+    if (!season) return
+
+    const seasonYear = season.apiFootballSeason
+
+    // Aggregate player stats across all matches in this competition season
+    const playerStats = await this.prisma.playerMatchStats.findMany({
+      where: {
+        match: { competitionSeasonId, statusShort: { in: ['FT', 'AET', 'PEN'] } },
+        minutesPlayed: { gt: 0 },
+      },
+      include: {
+        player: { select: { position: true } },
+      },
+    })
+
+    if (!playerStats.length) return
+
+    // Group by player
+    const byPlayer = new Map<number, typeof playerStats>()
+    for (const ps of playerStats) {
+      if (!byPlayer.has(ps.playerId)) byPlayer.set(ps.playerId, [])
+      byPlayer.get(ps.playerId)!.push(ps)
+    }
+
+    // ── PLAYER_OF_SEASON: best average rating (min 3 apps) ──
+    let topRatingScore  = -1
+    let topRatingPlayer: number | null = null
+
+    for (const [playerId, stats] of byPlayer) {
+      const withRating = stats.filter(s => s.rating != null)
+      if (withRating.length < 3) continue
+      const avgRating = withRating.reduce((sum, s) => sum + s.rating!, 0) / withRating.length
+      if (avgRating > topRatingScore) {
+        topRatingScore  = avgRating
+        topRatingPlayer = playerId
+      }
+    }
+
+    if (topRatingPlayer) {
+      await this.prisma.nitboxAward.upsert({
+        where: { type_competitionSeasonId: { type: 'PLAYER_OF_SEASON', competitionSeasonId } },
+        create: {
+          type: 'PLAYER_OF_SEASON',
+          playerId:           topRatingPlayer,
+          competitionSeasonId,
+          seasonYear,
+          score:              topRatingScore,
+        },
+        update: { playerId: topRatingPlayer, score: topRatingScore },
+      })
+      this.logger.log(`NitboxAward PLAYER_OF_SEASON for season ${competitionSeasonId} → player ${topRatingPlayer} (avg rating ${topRatingScore.toFixed(2)})`)
+    }
+
+    // ── BEST_DEFENSIVE: highest defensive actions per 90 (min 3 apps, outfield only) ──
+    let topDefScore  = -1
+    let topDefPlayer: number | null = null
+
+    for (const [playerId, stats] of byPlayer) {
+      const isGK = stats[0]?.player.position === 'GK'
+      if (isGK) continue
+      if (stats.length < 3) continue
+
+      const totalMins = stats.reduce((sum, s) => sum + (s.minutesPlayed ?? 0), 0)
+      if (totalMins < 180) continue  // min 2 full games
+
+      const defActions = stats.reduce((sum, s) =>
+        sum + (s.tackles ?? 0) + (s.interceptions ?? 0) + (s.clearances ?? 0), 0)
+      const defPer90 = defActions / (totalMins / 90)
+
+      if (defPer90 > topDefScore) {
+        topDefScore  = defPer90
+        topDefPlayer = playerId
+      }
+    }
+
+    if (topDefPlayer) {
+      await this.prisma.nitboxAward.upsert({
+        where: { type_competitionSeasonId: { type: 'BEST_DEFENSIVE', competitionSeasonId } },
+        create: {
+          type: 'BEST_DEFENSIVE',
+          playerId:           topDefPlayer,
+          competitionSeasonId,
+          seasonYear,
+          score:              topDefScore,
+        },
+        update: { playerId: topDefPlayer, score: topDefScore },
+      })
+      this.logger.log(`NitboxAward BEST_DEFENSIVE for season ${competitionSeasonId} → player ${topDefPlayer} (def/90 ${topDefScore.toFixed(2)})`)
+    }
   }
 }
