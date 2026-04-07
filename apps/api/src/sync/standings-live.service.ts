@@ -107,7 +107,7 @@ export class StandingsLiveService {
       const teamStats: Record<number, ReturnType<typeof this.emptyStats>> = {}
       for (const tid of teamIds) {
         const relevant = finishedMatches.filter(
-          m => m.homeTeamId === tid || m.awayTeamId === tid,
+          (m: typeof finishedMatches[number]) => m.homeTeamId === tid || m.awayTeamId === tid,
         )
         teamStats[tid] = this.aggregateMatchResults(tid, relevant)
         teamStats[tid].goalDifference = teamStats[tid].goalsFor - teamStats[tid].goalsAgainst

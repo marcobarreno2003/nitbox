@@ -176,7 +176,7 @@ export class LiveSyncService {
       select: { minute: true, type: true, detail: true, playerId: true },
     })
     const existingSet = new Set(
-      existing.map(e => `${e.minute}|${e.type}|${e.detail}|${e.playerId ?? ''}`)
+      existing.map((e: { minute: number | null; type: string | null; detail: string | null; playerId: number | null }) => `${e.minute}|${e.type}|${e.detail}|${e.playerId ?? ''}`)
     )
 
     // Resolve team IDs from API IDs

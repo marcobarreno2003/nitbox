@@ -94,8 +94,8 @@ export class MatchesService {
     const teams = await this.prisma.nationalTeam.findMany({
       select: { id: true, name: true, apiFootballId: true, fifaCode: true, logoUrl: true },
     })
-    const teamByApiId = new Map(teams.map(t => [t.apiFootballId, t]))
-    const teamApiIds  = new Set(teams.map(t => t.apiFootballId))
+    const teamByApiId = new Map(teams.map((t: typeof teams[number]) => [t.apiFootballId, t]))
+    const teamApiIds  = new Set(teams.map((t: typeof teams[number]) => t.apiFootballId))
 
     const res = await fetch(`${API_FOOTBALL_BASE}/fixtures?live=all`, {
       headers: { 'x-apisports-key': apiKey! },
