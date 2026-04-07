@@ -15,12 +15,15 @@ router = APIRouter(prefix="/ratings", tags=["ratings"])
 # ---------------------------------------------------------------------------
 
 class PlayerRatingResponse(BaseModel):
-    player_id:   int
-    player_name: str
-    position:    str
-    overall:     int
-    attributes:  dict[str, int]
-    attr_labels: list[str]
+    player_id:        int
+    player_name:      str
+    position:         str
+    overall:          int
+    attributes:       dict[str, int]   # -1 = no data for that attribute
+    attr_labels:      list[str]
+    matches_analyzed: int
+    data_confidence:  str              # "high" | "medium" | "low"
+    has_api_rating:   bool
 
 
 # ---------------------------------------------------------------------------
