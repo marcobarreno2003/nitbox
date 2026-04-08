@@ -120,6 +120,10 @@ export async function seedPlayers(prisma: PrismaClient) {
       const profile = profileMap.get(sp.id);
       const p = profile?.player;
 
+      const nameParts   = sp.name.split(' ');
+      const firstName   = p?.firstname ?? nameParts[0];
+      const lastName    = (p?.lastname ?? nameParts.slice(1).join(' ')) || '-';
+
       const nationalityId = p
         ? (countryMap.get(p.nationality) ?? team.country.id)
         : team.country.id;
@@ -128,32 +132,29 @@ export async function seedPlayers(prisma: PrismaClient) {
         ? (countryMap.get(p.birth.country) ?? null)
         : null;
 
+      const sharedFields = {
+        firstName,
+        lastName,
+        commonName:     p?.name ?? sp.name,
+        dateOfBirth:    p?.birth?.date ? new Date(p.birth.date) : undefined,
+        birthPlace:     p?.birth?.place ?? undefined,
+        birthCountryId: birthCountryId ?? undefined,
+        nationalityId:  nationalityId ?? undefined,
+        position:       normalizePosition(sp.position),
+        photoUrl:       sp.photo,
+        isInjured:      p?.injured ?? false,
+        heightCm:       parseCm(p?.height ?? null),
+        weightKg:       parseCm(p?.weight ?? null),
+      };
+
       const player = await prisma.player.upsert({
         where: { apiFootballId: sp.id },
-        update: {
-          commonName: p?.name ?? sp.name,
-          position:   normalizePosition(sp.position),
-          photoUrl:   sp.photo,
-          isInjured:  p?.injured ?? false,
-          heightCm:   parseCm(p?.height ?? null),
-          weightKg:   parseCm(p?.weight ?? null),
-        },
+        update: sharedFields,
         create: {
-          apiFootballId:  sp.id,
-          firstName:      p?.firstname ?? sp.name.split(' ')[0],
-          lastName:       (p?.lastname ?? sp.name.split(' ').slice(1).join(' ')) || '-',
-          commonName:     p?.name ?? sp.name,
-          dateOfBirth:    p?.birth?.date ? new Date(p.birth.date) : new Date('1990-01-01'),
-          birthPlace:     p?.birth?.place ?? null,
-          birthCountryId,
-          nationalityId,
-          position:       normalizePosition(sp.position),
-          shirtNumber:    sp.number,
-          photoUrl:       sp.photo,
-          isActive:       true,
-          isInjured:      p?.injured ?? false,
-          heightCm:       parseCm(p?.height ?? null),
-          weightKg:       parseCm(p?.weight ?? null),
+          apiFootballId: sp.id,
+          shirtNumber:   sp.number,
+          isActive:      true,
+          ...sharedFields,
         },
       });
 

@@ -63,7 +63,7 @@ function BenchList({ lineup, onPlayerClick }: { lineup: Lineup; onPlayerClick: (
 
   return (
     <div className="mt-4 pt-4 border-t border-border">
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3">Bench</p>
+      <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3">Suplentes</p>
       <div className="space-y-1">
         {bench.map(lp => (
           <button
@@ -119,7 +119,7 @@ export default function LineupsSection({
   return (
     <>
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-widest">Lineups</h2>
+        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-widest">Alineaciones</h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px_1fr] gap-6 items-start">
 
@@ -147,17 +147,17 @@ export default function LineupsSection({
                 <BenchList lineup={homeLineup} onPlayerClick={openPlayer} />
               </>
             ) : (
-              <p className="text-text-muted text-xs text-center py-8">No lineup available</p>
+              <p className="text-text-muted text-xs text-center py-8">Alineación no disponible</p>
             )}
           </div>
 
           {/* Events timeline */}
           <div className="bg-surface border border-border rounded-xl p-4">
             <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-4 text-center">
-              Events
+              Eventos
             </p>
             {allEvents.length === 0 ? (
-              <p className="text-text-muted text-xs text-center py-8">No events recorded</p>
+              <p className="text-text-muted text-xs text-center py-8">Sin eventos registrados</p>
             ) : (
               <div className="divide-y divide-border/30">
                 {allEvents.map(event => (
@@ -196,7 +196,7 @@ export default function LineupsSection({
                 <BenchList lineup={awayLineup} onPlayerClick={openPlayer} />
               </>
             ) : (
-              <p className="text-text-muted text-xs text-center py-8">No lineup available</p>
+              <p className="text-text-muted text-xs text-center py-8">Alineación no disponible</p>
             )}
           </div>
 

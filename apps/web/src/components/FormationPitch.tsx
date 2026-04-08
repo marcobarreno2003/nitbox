@@ -42,14 +42,40 @@ function initials(p: { firstName?: string | null; lastName?: string | null; comm
 
 // Derive grid positions from positionCode when gridPosition is missing.
 // Groups G/D/M/F into rows and spaces them evenly within each row.
+// Falls back to a 1-4-4-2 layout sorted by shirt number when no positionCode data exists.
 function deriveGridPositions(players: PitchPlayer[]): PitchPlayer[] {
   const ROW_ORDER = ['G', 'D', 'M', 'F']
   const groups: Record<string, PitchPlayer[]> = { G: [], D: [], M: [], F: [] }
 
   for (const p of players) {
-    const pos = p.positionCode ?? 'M'
-    const key = ROW_ORDER.includes(pos) ? pos : 'M'
-    groups[key]!.push(p)
+    const pos = p.positionCode ?? ''
+    if (ROW_ORDER.includes(pos)) {
+      groups[pos]!.push(p)
+    }
+    // nulls handled below
+  }
+
+  const hasPositionData = ROW_ORDER.some(k => groups[k]!.length > 0)
+
+  // No positionCode for anyone — sort by shirt number and place in 1-4-4-2
+  if (!hasPositionData) {
+    const sorted = [...players].sort((a, b) => (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99))
+    const layout = [1, 4, 4, 2] // GK · DEF · MID · FWD
+    const result: PitchPlayer[] = []
+    let idx = 0
+    layout.forEach((count, rowIdx) => {
+      sorted.slice(idx, idx + count).forEach((p, i) => {
+        result.push({ ...p, gridPosition: `${rowIdx + 1}:${i + 1}` })
+      })
+      idx += count
+    })
+    return result
+  }
+
+  // Has some positionCode — use groups, unknown pos → MID
+  for (const p of players) {
+    const pos = p.positionCode ?? ''
+    if (!ROW_ORDER.includes(pos)) groups['M']!.push(p)
   }
 
   const result: PitchPlayer[] = []
@@ -67,8 +93,10 @@ function deriveGridPositions(players: PitchPlayer[]): PitchPlayer[] {
 
 export default function FormationPitch({ formation, players, color = '#1d4ed8', onPlayerClick }: FormationPitchProps) {
   const rawStarters = players.filter(p => p.isStarter)
-  const hasGridData = rawStarters.some(p => p.gridPosition)
-  const starters    = hasGridData ? rawStarters.filter(p => p.gridPosition) : deriveGridPositions(rawStarters)
+  // Use exact grid positions only when ALL starters have them.
+  // If any are missing, derive positions for the full squad so no player disappears.
+  const allHaveGrid = rawStarters.length > 0 && rawStarters.every(p => p.gridPosition)
+  const starters    = allHaveGrid ? rawStarters : deriveGridPositions(rawStarters)
 
   // Parse "row:col" positions
   const cells = starters.map(p => {

@@ -3,8 +3,13 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
-  title: 'NITBox — Numbers in the Box',
-  description: 'Football analytics para todos, no solo para analistas.',
+  title: 'CopaFut — La app del Mundial 2026',
+  description: 'La única app que necesitas para el Mundial 2026. Resultados, alineaciones, estadísticas y análisis de las 60 mejores selecciones del mundo.',
+  openGraph: {
+    title: 'CopaFut — La app del Mundial 2026',
+    description: 'La única app que necesitas para el Mundial 2026.',
+    siteName: 'CopaFut',
+  },
 }
 
 export default function RootLayout({

@@ -72,7 +72,7 @@ export default async function MatchPage({
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-text-muted">
-        <Link href="/matches" className="hover:text-accent transition-colors">Matches</Link>
+        <Link href="/matches" className="hover:text-accent transition-colors">Partidos</Link>
         <span>/</span>
         <span>{match.homeTeam.fifaCode ?? match.homeTeam.name} vs {match.awayTeam.fifaCode ?? match.awayTeam.name}</span>
       </div>

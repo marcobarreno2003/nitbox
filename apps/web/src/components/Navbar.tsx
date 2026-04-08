@@ -1,27 +1,26 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const navLinks = [
-  { label: 'Blog',     href: '/blog' },
-  { label: 'Results',  href: '/matches' },
-  { label: 'Upcoming', href: '/upcoming' },
-  { label: 'Stats',    href: '/stats' },
-  { label: 'Awards',   href: '/awards' },
-  { label: 'Live',     href: '/live' },
+  { label: 'Blog',          href: '/blog' },
+  { label: 'Resultados',    href: '/matches' },
+  { label: 'Próximos',      href: '/upcoming' },
+  { label: 'Estadísticas',  href: '/stats' },
+  { label: 'Premios',       href: '/awards' },
+  { label: 'En Vivo',       href: '/live' },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
 
   const [team1, setTeam1] = useState('')
   const [team2, setTeam2] = useState('')
   const [year,  setYear]  = useState('')
-  const [lang,  setLang]  = useState<'en' | 'es'>('en')
+  const [lang,  setLang]  = useState<'en' | 'es'>('es')
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -36,14 +35,13 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center gap-8">
 
         {/* Logo */}
-        <Link href="/" className="shrink-0">
-          <Image
-            src="/nitbox-full-wordmark.png"
-            alt="NITBox"
-            width={180}
-            height={48}
-            priority
-          />
+        <Link href="/" className="shrink-0 flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
+            <span className="text-background font-black text-sm">CF</span>
+          </div>
+          <span className="font-black text-lg text-text-primary tracking-tight">
+            Copa<span className="text-accent">Fut</span>
+          </span>
         </Link>
 
         {/* Nav links */}
@@ -64,13 +62,10 @@ export default function Navbar() {
         </nav>
 
         {/* Search */}
-        <form
-          onSubmit={handleSearch}
-          className="flex items-center gap-2 ml-auto"
-        >
+        <form onSubmit={handleSearch} className="flex items-center gap-2 ml-auto">
           <input
             type="text"
-            placeholder="Team 1"
+            placeholder="Equipo 1"
             value={team1}
             onChange={(e) => setTeam1(e.target.value)}
             className="bg-surface border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted w-24 focus:outline-none focus:border-accent transition-colors"
@@ -78,14 +73,14 @@ export default function Navbar() {
           <span className="text-text-muted text-xs font-medium">vs</span>
           <input
             type="text"
-            placeholder="Team 2"
+            placeholder="Equipo 2"
             value={team2}
             onChange={(e) => setTeam2(e.target.value)}
             className="bg-surface border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted w-24 focus:outline-none focus:border-accent transition-colors"
           />
           <input
             type="text"
-            placeholder="Year"
+            placeholder="Año"
             value={year}
             onChange={(e) => setYear(e.target.value)}
             className="bg-surface border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted w-16 focus:outline-none focus:border-accent transition-colors"
@@ -94,32 +89,28 @@ export default function Navbar() {
             type="submit"
             className="bg-accent hover:bg-accent-dim text-background text-sm font-semibold px-4 py-1.5 rounded-md transition-colors"
           >
-            Search
+            Buscar
           </button>
         </form>
 
         {/* Language toggle */}
         <div className="flex items-center gap-1 shrink-0 ml-4">
           <button
-            onClick={() => setLang('en')}
-            className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
-              lang === 'en'
-                ? 'text-accent'
-                : 'text-text-muted hover:text-text-primary'
-            }`}
-          >
-            EN
-          </button>
-          <span className="text-border text-xs">|</span>
-          <button
             onClick={() => setLang('es')}
             className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
-              lang === 'es'
-                ? 'text-accent'
-                : 'text-text-muted hover:text-text-primary'
+              lang === 'es' ? 'text-accent' : 'text-text-muted hover:text-text-primary'
             }`}
           >
             ES
+          </button>
+          <span className="text-border text-xs">|</span>
+          <button
+            onClick={() => setLang('en')}
+            className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+              lang === 'en' ? 'text-accent' : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            EN
           </button>
         </div>
 
