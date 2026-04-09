@@ -101,60 +101,44 @@ export async function enrichPlayerStats(
       const rating      = s.games.rating    ? parseFloat(s.games.rating) : null;
       const passAcc     = s.passes.accuracy ? parseFloat(String(s.passes.accuracy).replace('%', '')) : null;
 
+      const playerStatFields = {
+        minutesPlayed:     s.games.minutes,
+        rating:            (rating !== null && !isNaN(rating)) ? rating : null,
+        captain:           s.games.captain    ?? false,
+        substitute:        s.games.substitute ?? false,
+        goals:             s.goals.total      ?? 0,
+        goalsConceded:     s.goals.conceded,
+        assists:           s.goals.assists    ?? 0,
+        saves:             s.goals.saves,
+        shots:             s.shots.total,
+        shotsOnTarget:     s.shots.on,
+        passes:            s.passes.total,
+        keyPasses:         s.passes.key,
+        passAccuracyPct:   (passAcc !== null && !isNaN(passAcc)) ? passAcc : null,
+        tackles:           s.tackles.total,
+        blockedShots:      s.tackles.blocks,
+        interceptions:     s.tackles.interceptions,
+        duelsTotal:        s.duels.total,
+        duelsWon:          s.duels.won,
+        dribbles:          s.dribbles.attempts,
+        dribblesCompleted: s.dribbles.success,
+        dribblesPast:      s.dribbles.past,
+        foulsCommitted:    s.fouls.committed,
+        foulsSuffered:     s.fouls.drawn,
+        yellowCards:       s.cards.yellow ?? 0,
+        redCards:          s.cards.red    ?? 0,
+        offsides:          s.offsides,
+        penaltyWon:        s.penalty.won,
+        penaltyCommitted:  s.penalty.commited,
+        penaltyScored:     s.penalty.scored,
+        penaltyMissed:     s.penalty.missed,
+        penaltySaved:      s.penalty.saved,
+      };
+
       await prisma.playerMatchStats.upsert({
         where:  { matchId_playerId: { matchId, playerId: player.id } },
-        create: {
-          matchId,
-          playerId:          player.id,
-          teamId:            teamDbId,
-          minutesPlayed:     s.games.minutes,
-          rating:            (rating !== null && !isNaN(rating)) ? rating : null,
-          captain:           s.games.captain    ?? false,
-          substitute:        s.games.substitute ?? false,
-          goals:             s.goals.total      ?? 0,
-          goalsConceded:     s.goals.conceded,
-          assists:           s.goals.assists    ?? 0,
-          saves:             s.goals.saves,
-          shots:             s.shots.total,
-          shotsOnTarget:     s.shots.on,
-          passes:            s.passes.total,
-          keyPasses:         s.passes.key,
-          passAccuracyPct:   (passAcc !== null && !isNaN(passAcc)) ? passAcc : null,
-          tackles:           s.tackles.total,
-          blockedShots:      s.tackles.blocks,
-          interceptions:     s.tackles.interceptions,
-          duelsTotal:        s.duels.total,
-          duelsWon:          s.duels.won,
-          dribbles:          s.dribbles.attempts,
-          dribblesCompleted: s.dribbles.success,
-          dribblesPast:      s.dribbles.past,
-          foulsCommitted:    s.fouls.committed,
-          foulsSuffered:     s.fouls.drawn,
-          yellowCards:       s.cards.yellow ?? 0,
-          redCards:          s.cards.red    ?? 0,
-          offsides:          s.offsides,
-          penaltyWon:        s.penalty.won,
-          penaltyCommitted:  s.penalty.commited,
-          penaltyScored:     s.penalty.scored,
-          penaltyMissed:     s.penalty.missed,
-          penaltySaved:      s.penalty.saved,
-        },
-        update: {
-          minutesPlayed:     s.games.minutes,
-          rating:            (rating !== null && !isNaN(rating)) ? rating : null,
-          goals:             s.goals.total   ?? 0,
-          assists:           s.goals.assists ?? 0,
-          saves:             s.goals.saves,
-          shots:             s.shots.total,
-          shotsOnTarget:     s.shots.on,
-          passes:            s.passes.total,
-          keyPasses:         s.passes.key,
-          passAccuracyPct:   (passAcc !== null && !isNaN(passAcc)) ? passAcc : null,
-          tackles:           s.tackles.total,
-          interceptions:     s.tackles.interceptions,
-          yellowCards:       s.cards.yellow ?? 0,
-          redCards:          s.cards.red    ?? 0,
-        },
+        create: { matchId, playerId: player.id, teamId: teamDbId, ...playerStatFields },
+        update: playerStatFields,
       });
     }
   }
@@ -168,11 +152,16 @@ export async function enrichMatchEvents(
   fixtureId: number,
   teamMap:   Map<number, number>,
 ): Promise<void> {
-  // Skip entirely if events already exist — events don't change after FT
-  const existing = await prisma.matchEvent.count({ where: { matchId } });
-  if (existing > 0) return;
-
   const events = await apiGet<ApiEvent>('fixtures/events', { fixture: fixtureId });
+
+  // Events are immutable after FT — skip if API returned the same count we already have
+  const existing = await prisma.matchEvent.count({ where: { matchId } });
+  if (existing > 0 && existing === events.length) return;
+
+  // Delete and recreate if count differs (partial save from a previous run)
+  if (existing > 0) {
+    await prisma.matchEvent.deleteMany({ where: { matchId } });
+  }
 
   for (const e of events) {
     const teamDbId = teamMap.get(e.team.id);
@@ -281,45 +270,31 @@ export async function enrichTeamStats(
 
     const s = r.statistics;
 
+    const teamStatFields = {
+      possessionPct:   parseStat(s, 'Ball Possession'),
+      shots:           parseStat(s, 'Total Shots'),
+      shotsOnTarget:   parseStat(s, 'Shots on Goal'),
+      shotsOffTarget:  parseStat(s, 'Shots off Goal'),
+      shotsBlocked:    parseStat(s, 'Blocked Shots'),
+      shotsInsideBox:  parseStat(s, 'Shots insidebox'),
+      shotsOutsideBox: parseStat(s, 'Shots outsidebox'),
+      xG:              parseStat(s, 'expected_goals'),
+      goalsPrevented:  parseStat(s, 'goals_prevented'),
+      passes:          parseStat(s, 'Total passes'),
+      passesCompleted: parseStat(s, 'Passes accurate'),
+      passAccuracyPct: parseStat(s, 'Passes %'),
+      corners:         parseStat(s, 'Corner Kicks'),
+      fouls:           parseStat(s, 'Fouls'),
+      yellowCards:     parseStat(s, 'Yellow Cards'),
+      redCards:        parseStat(s, 'Red Cards'),
+      offsides:        parseStat(s, 'Offsides'),
+      saves:           parseStat(s, 'Goalkeeper Saves'),
+    };
+
     await prisma.matchTeamStatistics.upsert({
       where:  { matchId_teamId: { matchId, teamId: teamDbId } },
-      create: {
-        matchId,
-        teamId:          teamDbId,
-        isHome:          false, // resolved below via update
-        possessionPct:   parseStat(s, 'Ball Possession'),
-        shots:           parseStat(s, 'Total Shots'),
-        shotsOnTarget:   parseStat(s, 'Shots on Goal'),
-        shotsOffTarget:  parseStat(s, 'Shots off Goal'),
-        shotsBlocked:    parseStat(s, 'Blocked Shots'),
-        shotsInsideBox:  parseStat(s, 'Shots insidebox'),
-        shotsOutsideBox: parseStat(s, 'Shots outsidebox'),
-        xG:              parseStat(s, 'expected_goals'),
-        goalsPrevented:  parseStat(s, 'goals_prevented'),
-        passes:          parseStat(s, 'Total passes'),
-        passesCompleted: parseStat(s, 'Passes accurate'),
-        passAccuracyPct: parseStat(s, 'Passes %'),
-        corners:         parseStat(s, 'Corner Kicks'),
-        fouls:           parseStat(s, 'Fouls'),
-        yellowCards:     parseStat(s, 'Yellow Cards'),
-        redCards:        parseStat(s, 'Red Cards'),
-        offsides:        parseStat(s, 'Offsides'),
-        saves:           parseStat(s, 'Goalkeeper Saves'),
-      },
-      update: {
-        possessionPct:   parseStat(s, 'Ball Possession'),
-        shots:           parseStat(s, 'Total Shots'),
-        shotsOnTarget:   parseStat(s, 'Shots on Goal'),
-        shotsOffTarget:  parseStat(s, 'Shots off Goal'),
-        shotsBlocked:    parseStat(s, 'Blocked Shots'),
-        xG:              parseStat(s, 'expected_goals'),
-        goalsPrevented:  parseStat(s, 'goals_prevented'),
-        passes:          parseStat(s, 'Total passes'),
-        passesCompleted: parseStat(s, 'Passes accurate'),
-        passAccuracyPct: parseStat(s, 'Passes %'),
-        corners:         parseStat(s, 'Corner Kicks'),
-        saves:           parseStat(s, 'Goalkeeper Saves'),
-      },
+      create: { matchId, teamId: teamDbId, isHome: false, ...teamStatFields },
+      update: teamStatFields,
     });
   }
 

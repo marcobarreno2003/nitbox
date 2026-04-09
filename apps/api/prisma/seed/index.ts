@@ -1,59 +1,45 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-// Load from apps/api/.env first, then fall back to root .env
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 // =============================================================================
-// NITBox Seed Orchestrator
-// Run: npx ts-node prisma/seed/index.ts
+// CopaFut Seed Orchestrator
+// Run: npx ts-node prisma/seed/index.ts [step...]
 //
-// Order matters — respects foreign key constraints:
-// 01 static → 02 teams → 03 competitions → 04 fixtures → 05 players →
-// 06 standings → 07 player-season-stats → 08 coaches
+// Steps (in dependency order):
+//   reference   — confederations, countries, teams, competitions, players, coaches
+//   matches     — fixtures by league + by team (friendlies), calendar, enrichment
+//   stats       — standings, team season stats, player season stats
+//   predictions — ML predictions (requires ML service running)
 //
-// 07 is a pure DB aggregation (no API requests)
-// 08 coaches: ~60 requests (1 per team)
+// Examples:
+//   npx ts-node prisma/seed/index.ts              # run all steps
+//   npx ts-node prisma/seed/index.ts reference    # only step 1
+//   npx ts-node prisma/seed/index.ts matches stats # steps 2 + 3
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
 import { DailyLimitError } from './api';
-import { seedStatic }            from './seeders/01-static';
-import { seedTeams }             from './seeders/02-teams';
-import { seedCompetitions }      from './seeders/03-competitions';
-import { seedFixtures }          from './seeders/04-fixtures';
-import { seedPlayers }           from './seeders/05-players';
-import { seedStandings }         from './seeders/06-standings';
-import { seedPlayerSeasonStats } from './seeders/07-player-season-stats';
-import { seedCoaches }           from './seeders/08-coaches';
-import { seedFriendlies }        from './seeders/09-friendlies';
-import { seedCalendar }          from './seeders/10-calendar';
-import { seedMatchesFinished }   from './seeders/11-matches-finished';
-import { seedPredictions }       from './seeders/12-predictions';
+import { seedReference }   from './seeders/01-reference';
+import { seedMatches }     from './seeders/02-matches';
+import { seedStats }       from './seeders/03-stats';
+import { seedPredictions } from './seeders/04-predictions';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('NITBox Seed Starting...\n');
+  console.log('CopaFut Seed Starting...\n');
 
-  const args = process.argv.slice(2);
+  const args   = process.argv.slice(2);
   const runAll = args.length === 0;
-
-  const run = (name: string) => runAll || args.includes(name);
+  const run    = (name: string) => runAll || args.includes(name);
 
   try {
-    if (run('static'))              await seedStatic(prisma);
-    if (run('teams'))               await seedTeams(prisma);
-    if (run('competitions'))        await seedCompetitions(prisma);
-    if (run('players'))             await seedPlayers(prisma);
-    if (run('fixtures'))            await seedFixtures(prisma);
-    if (run('friendlies'))          await seedFriendlies(prisma);
-    if (run('standings'))           await seedStandings(prisma);
-    if (run('player-season-stats')) await seedPlayerSeasonStats(prisma);
-    if (run('coaches'))             await seedCoaches(prisma);
-    if (run('calendar'))            await seedCalendar(prisma);
-    if (run('matches-finished'))    await seedMatchesFinished(prisma);
-    if (run('predictions'))         await seedPredictions(prisma);
+    if (run('reference'))   await seedReference(prisma);
+    if (run('matches'))     await seedMatches(prisma);
+    if (run('stats'))       await seedStats(prisma);
+    if (run('predictions')) await seedPredictions(prisma);
 
     console.log('\nSeed complete!\n');
   } catch (err) {

@@ -1,20 +1,13 @@
 // =============================================================================
-// Seeder 12: ML Predictions — calls the FastAPI ML service for every upcoming
-//            match that doesn't yet have a MatchPrediction row, then persists
-//            the result to the DB.
+// Seeder 04: ML Predictions
+//   - Calls POST /predict on the FastAPI ML service for every upcoming match
+//     without a prediction, then persists the result.
+//   - Triggers model training before generating predictions.
 //
 // Prerequisites:
 //   - FastAPI ML service running on ML_SERVICE_URL (default: localhost:3003)
-//   - seed:calendar already ran (matches with enrichStatus = SCHEDULED exist)
+//   - seedMatches() already ran (matches with enrichStatus = SCHEDULED exist)
 //   - At least 30 FULLY_ENRICHED matches in DB for the model to train on
-//
-// Flow:
-//   1. Find all matches with statusShort IN ('NS','TBD','PST') and no prediction
-//   2. For each, call POST /predict on the FastAPI service
-//   3. Persist result to match_predictions table
-//   4. Skip if ML service is unavailable (non-fatal — re-run later)
-//
-// Run: npm run seed:predictions
 // =============================================================================
 
 import * as dotenv from 'dotenv';
@@ -24,7 +17,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 import { PrismaClient } from '@prisma/client';
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:3003';
+const ML_SERVICE_URL    = process.env.ML_SERVICE_URL ?? 'http://localhost:3003';
 const UPCOMING_STATUSES = ['NS', 'TBD', 'PST'];
 
 interface PredictionResponse {
@@ -65,7 +58,7 @@ export async function seedPredictions(prisma: PrismaClient) {
   console.log('\nSeeding ML predictions...');
   console.log(`  ML service: ${ML_SERVICE_URL}`);
 
-  // Check ML service health first
+  // Health check
   try {
     const health = await fetch(`${ML_SERVICE_URL}/health`);
     if (!health.ok) throw new Error(`Health check returned ${health.status}`);
@@ -73,21 +66,19 @@ export async function seedPredictions(prisma: PrismaClient) {
   } catch (err: any) {
     console.error(`  [ERROR] ML service not reachable at ${ML_SERVICE_URL}`);
     console.error(`  Start it with: cd apps/ml && .venv/bin/uvicorn main:app --port 3003`);
-    console.error(`  Error: ${err?.message}`);
     return;
   }
 
-  // Trigger training if not yet trained
-  console.log('\n  Triggering model training (uses all FULLY_ENRICHED matches)...');
+  // Trigger training
+  console.log('\n  Triggering model training...');
   try {
-    const trainRes = await fetch(`${ML_SERVICE_URL}/predict/train`, { method: 'POST' });
+    const trainRes  = await fetch(`${ML_SERVICE_URL}/predict/train`, { method: 'POST' });
     if (trainRes.ok) {
       const trainData = await trainRes.json() as any;
       console.log(`  Best model: ${trainData.best_model} (CV acc: ${trainData.best_cv_acc})`);
       if (trainData.models) {
         for (const m of trainData.models) {
-          const tag = m.is_best ? ' ← best' : '';
-          console.log(`    ${m.name.padEnd(25)} ${(m.cv_accuracy * 100).toFixed(1)}%${tag}`);
+          console.log(`    ${m.name.padEnd(25)} ${(m.cv_accuracy * 100).toFixed(1)}%${m.is_best ? ' ← best' : ''}`);
         }
       }
     } else {
@@ -114,14 +105,14 @@ export async function seedPredictions(prisma: PrismaClient) {
   });
 
   if (!pending.length) {
-    console.log('\n  All upcoming matches already have predictions. Nothing to do.');
+    console.log('\n  All upcoming matches already have predictions.');
     return;
   }
 
-  console.log(`\n  Found ${pending.length} upcoming match(es) without predictions.`);
+  console.log(`\n  ${pending.length} upcoming match(es) without predictions`);
 
-  let created  = 0;
-  let failed   = 0;
+  let created = 0;
+  let failed  = 0;
 
   for (const match of pending) {
     const label = `${match.homeTeam.name} vs ${match.awayTeam.name} (${match.kickoffAt?.toISOString().slice(0, 10)})`;
@@ -129,34 +120,23 @@ export async function seedPredictions(prisma: PrismaClient) {
 
     const prediction = await callPredict(match.apiFootballId);
 
-    if (!prediction) {
-      console.log('[FAIL]');
-      failed++;
-      continue;
-    }
+    if (!prediction) { console.log('[FAIL]'); failed++; continue; }
 
     try {
+      const predFields = {
+        modelVersion:    prediction.model,
+        homeWinProb:     prediction.home_win_prob,
+        drawProb:        prediction.draw_prob,
+        awayWinProb:     prediction.away_win_prob,
+        predictedResult: prediction.predicted_result,
+        confidence:      prediction.confidence,
+        modelScores:     prediction.model_scores,
+      };
+
       await prisma.matchPrediction.upsert({
         where:  { matchId: match.id },
-        create: {
-          matchId:         match.id,
-          modelVersion:    prediction.model,
-          homeWinProb:     prediction.home_win_prob,
-          drawProb:        prediction.draw_prob,
-          awayWinProb:     prediction.away_win_prob,
-          predictedResult: prediction.predicted_result,
-          confidence:      prediction.confidence,
-          modelScores:     prediction.model_scores,
-        },
-        update: {
-          modelVersion:    prediction.model,
-          homeWinProb:     prediction.home_win_prob,
-          drawProb:        prediction.draw_prob,
-          awayWinProb:     prediction.away_win_prob,
-          predictedResult: prediction.predicted_result,
-          confidence:      prediction.confidence,
-          modelScores:     prediction.model_scores,
-        },
+        create: { matchId: match.id, ...predFields },
+        update: predFields,
       });
 
       const pct = (p: number) => `${(p * 100).toFixed(0)}%`;
@@ -168,6 +148,5 @@ export async function seedPredictions(prisma: PrismaClient) {
     }
   }
 
-  console.log(`\n  Predictions seed complete.`);
-  console.log(`  Created: ${created}  |  Failed: ${failed}`);
+  console.log(`\n  Predictions complete: ${created} created, ${failed} failed`);
 }

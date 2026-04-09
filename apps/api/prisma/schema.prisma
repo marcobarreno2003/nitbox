@@ -292,7 +292,7 @@ model Player {
   firstName       String   @db.VarChar(100)
   lastName        String   @db.VarChar(100)
   commonName      String?  @db.VarChar(100)        // player.name (display name)
-  dateOfBirth     DateTime @db.Date
+  dateOfBirth     DateTime? @db.Date
   birthPlace      String?  @db.VarChar(100)        // birth.place from GET /players
   birthCountryId  Int?
   birthCountry    Country? @relation("BirthCountry", fields: [birthCountryId], references: [id])
