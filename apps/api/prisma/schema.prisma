@@ -13,7 +13,7 @@ datasource db {
 
 model Confederation {
   id        Int      @id @default(autoincrement())
-  code      String   @unique @db.VarChar(10)  // "UEFA", "CONMEBOL", "CAF", "AFC", "CONCACAF", "OFC", "FIFA"
+  code      String   @unique @db.VarChar(10)   // "UEFA", "CONMEBOL", "CAF", "AFC", "CONCACAF", "OFC", "FIFA"
   name      String   @unique @db.VarChar(100)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -29,21 +29,22 @@ model Confederation {
 // ---------------------------------------------------------------------------
 
 model Country {
-  id               Int           @id @default(autoincrement())
-  isoAlpha2        String        @db.VarChar(2)
-  isoAlpha3        String        @unique @db.VarChar(3)
-  name             String        @unique @db.VarChar(100)
-  flagUrl          String?       @db.VarChar(500)
-  confederationId  Int
-  confederation    Confederation @relation(fields: [confederationId], references: [id])
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id              Int           @id @default(autoincrement())
+  isoAlpha2       String        @db.VarChar(2)
+  isoAlpha3       String        @unique @db.VarChar(3)
+  name            String        @unique @db.VarChar(100)
+  flagUrl         String?       @db.VarChar(500)
+  confederationId Int
+  confederation   Confederation @relation(fields: [confederationId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   nationalTeam      NationalTeam?
   venues            Venue[]
   players           Player[]
   playersBornHere   Player[]      @relation("BirthCountry")
   coachesBornHere   Coach[]       @relation("CoachBirthCountry")
+  coachNationality  Coach[]       @relation("CoachNationality")
   hostedSeasons     CompetitionSeason[]
 
   @@map("countries")
@@ -54,20 +55,18 @@ model Country {
 // ---------------------------------------------------------------------------
 
 model Venue {
-  id              Int      @id @default(autoincrement())
-  apiFootballId   Int?     @unique                    // venue.id from GET /teams
-  name            String   @db.VarChar(200)
-  address         String?  @db.VarChar(255)           // venue.address from GET /teams
-  city            String   @db.VarChar(100)
-  countryId       Int
-  country         Country  @relation(fields: [countryId], references: [id])
-  capacity        Int?
-  surfaceType     String?  @db.VarChar(50)            // "grass", "artificial"
-  imageUrl        String?  @db.VarChar(500)           // venue.image from GET /teams
-  latitude        Float?
-  longitude       Float?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  apiFootballId Int?     @unique
+  name          String   @db.VarChar(200)
+  address       String?  @db.VarChar(255)
+  city          String   @db.VarChar(100)
+  countryId     Int
+  country       Country  @relation(fields: [countryId], references: [id])
+  capacity      Int?
+  surfaceType   String?  @db.VarChar(50)
+  imageUrl      String?  @db.VarChar(500)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   matches Match[]
 
@@ -80,21 +79,21 @@ model Venue {
 // ---------------------------------------------------------------------------
 
 model NationalTeam {
-  id              Int      @id @default(autoincrement())
-  apiFootballId   Int      @unique                    // team.id from GET /teams
-  countryId       Int      @unique
-  country         Country  @relation(fields: [countryId], references: [id])
-  fifaCode        String   @unique @db.VarChar(3)     // team.code e.g. "BRA", "GER"
-  name            String   @db.VarChar(100)           // team.name
-  logoUrl         String?  @db.VarChar(500)           // team.logo
-  founded         Int?                                // team.founded (year)
-  national        Boolean  @default(true)             // team.national
-  fifaRanking     Int?
-  nickname        String?  @db.VarChar(100)
-  kitPrimary      String?  @db.VarChar(20)
-  kitSecondary    String?  @db.VarChar(20)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  apiFootballId Int      @unique
+  countryId     Int      @unique
+  country       Country  @relation(fields: [countryId], references: [id])
+  fifaCode      String?  @unique @db.VarChar(3)   // nullable — not all teams have a FIFA code
+  name          String   @db.VarChar(100)
+  logoUrl       String?  @db.VarChar(500)
+  founded       Int?
+  national      Boolean  @default(true)
+  fifaRanking   Int?                               // manual enrichment
+  nickname      String?  @db.VarChar(100)
+  kitPrimary    String?  @db.VarChar(20)
+  kitSecondary  String?  @db.VarChar(20)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   homeMatches       Match[]               @relation("HomeTeam")
   awayMatches       Match[]               @relation("AwayTeam")
@@ -117,20 +116,21 @@ model NationalTeam {
 // ---------------------------------------------------------------------------
 
 model Competition {
-  id              Int            @id @default(autoincrement())
-  apiFootballId   Int            @unique               // league.id from GET /leagues
-  name            String         @unique @db.VarChar(200)
-  shortName       String?        @db.VarChar(50)
-  type            String         @db.VarChar(50)       // "world_cup", "continental", "qualifier", "friendly"
+  id            Int            @id @default(autoincrement())
+  apiFootballId Int            @unique
+  name          String         @db.VarChar(200)   // no @unique — "Friendlies" appears per confederation
+  shortName     String?        @db.VarChar(50)
+  type          String         @db.VarChar(50)    // "world_cup", "continental", "qualifier", "friendly"
   confederationId Int?
-  confederation   Confederation? @relation(fields: [confederationId], references: [id])
-  logoUrl         String?        @db.VarChar(500)      // league.logo
-  flagUrl         String?        @db.VarChar(500)      // league.flag (country flag for the competition)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  confederation  Confederation? @relation(fields: [confederationId], references: [id])
+  logoUrl       String?        @db.VarChar(500)
+  flagUrl       String?        @db.VarChar(500)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   seasons CompetitionSeason[]
 
+  @@index([name])
   @@map("competitions")
 }
 
@@ -142,13 +142,14 @@ model CompetitionSeason {
   id                Int         @id @default(autoincrement())
   competitionId     Int
   competition       Competition @relation(fields: [competitionId], references: [id])
-  apiFootballSeason Int?                               // league.season integer from GET /fixtures (e.g. 2024)
-  label             String      @db.VarChar(20)        // display label e.g. "2026" or "2025/26"
+  apiFootballSeason Int                             // NOT NULL — required for all API calls
+  label             String      @db.VarChar(20)
   startDate         DateTime    @db.Date
   endDate           DateTime    @db.Date
-  isCurrent         Boolean     @default(false)        // seasons[].current from GET /leagues
+  isCurrent         Boolean     @default(false)
   hostCountryId     Int?
   hostCountry       Country?    @relation(fields: [hostCountryId], references: [id])
+  coverageFlags     Json?                           // seasons[].coverage from GET /leagues
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -160,6 +161,7 @@ model CompetitionSeason {
   trophies          Trophy[]
   squads            Squad[]
   nitboxAwards      NitboxAward[]
+  injuries          PlayerInjury[]
 
   @@unique([competitionId, label])
   @@map("competition_seasons")
@@ -170,13 +172,13 @@ model CompetitionSeason {
 // ---------------------------------------------------------------------------
 
 model CompetitionGroup {
-  id                    Int               @id @default(autoincrement())
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
-  name                  String            @db.VarChar(50)  // "Group A", "Round of 16", "Final"
-  stage                 String            @db.VarChar(50)  // "group", "knockout"
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                  Int               @id @default(autoincrement())
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  name                String            @db.VarChar(50)
+  stage               String            @db.VarChar(50)   // "group", "knockout"
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   matches   Match[]
   standings Standing[]
@@ -190,50 +192,47 @@ model CompetitionGroup {
 // ---------------------------------------------------------------------------
 
 model Standing {
-  id                    Int               @id @default(autoincrement())
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
-  groupId               Int?
-  group                 CompetitionGroup? @relation(fields: [groupId], references: [id])
-  teamId                Int
-  team                  NationalTeam      @relation(fields: [teamId], references: [id])
+  id                  Int               @id @default(autoincrement())
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  groupId             Int?
+  group               CompetitionGroup? @relation(fields: [groupId], references: [id])
+  teamId              Int
+  team                NationalTeam      @relation(fields: [teamId], references: [id])
 
-  // From GET /standings
   position        Int
-  form            String?  @db.VarChar(20)   // "WWDLW"
-  status          String?  @db.VarChar(20)   // "same", "up", "down"
-  description     String?  @db.VarChar(255)  // "Qualified - Next Round"
+  form            String?  @db.VarChar(20)
+  status          String?  @db.VarChar(20)
+  description     String?  @db.VarChar(255)
 
-  // Aggregate totals
   played          Int      @default(0)
   won             Int      @default(0)
   drawn           Int      @default(0)
   lost            Int      @default(0)
   goalsFor        Int      @default(0)
   goalsAgainst    Int      @default(0)
-  goalDifference  Int      @default(0)
+  goalDifference  Int      @default(0)   // goalsFor - goalsAgainst (denormalized for sort)
   points          Int      @default(0)
 
-  // Home split
-  homePlayed      Int      @default(0)
-  homeWon         Int      @default(0)
-  homeDrawn       Int      @default(0)
-  homeLost        Int      @default(0)
-  homeGoalsFor    Int      @default(0)
+  homePlayed       Int     @default(0)
+  homeWon          Int     @default(0)
+  homeDrawn        Int     @default(0)
+  homeLost         Int     @default(0)
+  homeGoalsFor     Int     @default(0)
   homeGoalsAgainst Int     @default(0)
 
-  // Away split
-  awayPlayed      Int      @default(0)
-  awayWon         Int      @default(0)
-  awayDrawn       Int      @default(0)
-  awayLost        Int      @default(0)
-  awayGoalsFor    Int      @default(0)
+  awayPlayed       Int     @default(0)
+  awayWon          Int     @default(0)
+  awayDrawn        Int     @default(0)
+  awayLost         Int     @default(0)
+  awayGoalsFor     Int     @default(0)
   awayGoalsAgainst Int     @default(0)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([competitionSeasonId, groupId, teamId])
+  @@index([competitionSeasonId, position])
   @@map("standings")
 }
 
@@ -243,22 +242,24 @@ model Standing {
 
 model Coach {
   id              Int       @id @default(autoincrement())
-  apiFootballId   Int?      @unique               // id from GET /coachs
+  apiFootballId   Int?      @unique
   firstName       String    @db.VarChar(100)
   lastName        String    @db.VarChar(100)
   dateOfBirth     DateTime? @db.Date
-  birthPlace      String?   @db.VarChar(100)      // birth.place from GET /coachs
+  birthPlace      String?   @db.VarChar(100)
   birthCountryId  Int?
   birthCountry    Country?  @relation("CoachBirthCountry", fields: [birthCountryId], references: [id])
-  nationality     String?   @db.VarChar(100)
-  heightCm        Int?                            // parsed from "180 cm"
-  weightKg        Int?                            // parsed from "75 kg"
+  nationalityId   Int?
+  nationality     Country?  @relation("CoachNationality", fields: [nationalityId], references: [id])
+  heightCm        Int?
+  weightKg        Int?
   photoUrl        String?   @db.VarChar(500)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   assignments  CoachAssignment[]
   matchLineups MatchLineup[]
+  trophies     Trophy[]
 
   @@map("coaches")
 }
@@ -273,12 +274,13 @@ model CoachAssignment {
   coach     Coach        @relation(fields: [coachId], references: [id])
   teamId    Int
   team      NationalTeam @relation(fields: [teamId], references: [id])
-  role      String       @db.VarChar(50)  // "head_coach", "assistant", "goalkeeper_coach"
+  role      String       @db.VarChar(50)
   startDate DateTime     @db.Date
   endDate   DateTime?    @db.Date
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  @@unique([coachId, teamId, startDate])
   @@map("coach_assignments")
 }
 
@@ -287,37 +289,38 @@ model CoachAssignment {
 // ---------------------------------------------------------------------------
 
 model Player {
-  id              Int      @id @default(autoincrement())
-  apiFootballId   Int      @unique                 // player.id from GET /players
-  firstName       String   @db.VarChar(100)
-  lastName        String   @db.VarChar(100)
-  commonName      String?  @db.VarChar(100)        // player.name (display name)
-  dateOfBirth     DateTime? @db.Date
-  birthPlace      String?  @db.VarChar(100)        // birth.place from GET /players
-  birthCountryId  Int?
-  birthCountry    Country? @relation("BirthCountry", fields: [birthCountryId], references: [id])
-  nationalityId   Int
-  nationality     Country  @relation(fields: [nationalityId], references: [id])
-  position        String   @db.VarChar(30)         // "GK", "CB", "LB", "CDM", "CM", "CAM", "LW", "RW", "ST"
-  preferredFoot   String?  @db.VarChar(5)          // "left", "right", "both"
-  heightCm        Int?                             // parsed from "175 cm"
-  weightKg        Int?                             // parsed from "68 kg"
-  shirtNumber     Int?
-  photoUrl        String?  @db.VarChar(500)
-  isActive        Boolean  @default(true)
-  isInjured       Boolean  @default(false)         // player.injured from GET /players
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  apiFootballId Int      @unique
+  firstName     String   @db.VarChar(100)
+  lastName      String   @db.VarChar(100)
+  commonName    String?  @db.VarChar(100)
+  dateOfBirth   DateTime? @db.Date
+  birthPlace    String?  @db.VarChar(100)
+  birthCountryId Int?
+  birthCountry  Country? @relation("BirthCountry", fields: [birthCountryId], references: [id])
+  nationalityId Int
+  nationality   Country  @relation(fields: [nationalityId], references: [id])
+  position      String   @db.VarChar(10)   // "GK", "DEF", "MID", "FWD" — broad from API
+  preferredFoot String?  @db.VarChar(5)
+  heightCm      Int?
+  weightKg      Int?
+  shirtNumber   Int?
+  photoUrl      String?  @db.VarChar(500)
+  isActive      Boolean  @default(true)
+  isInjured     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  squadPlayers        SquadPlayer[]
-  matchEvents         MatchEvent[]             @relation("EventPlayer")
-  assistEvents        MatchEvent[]             @relation("EventAssist")
-  playerMatchStats    PlayerMatchStats[]
-  playerSeasonStats   PlayerSeasonStats[]
-  lineupPlayers       LineupPlayer[]
-  injuries            PlayerInjury[]
-  nitboxAwards        NitboxAward[]
-  matchPredictions    PlayerMatchPrediction[]
+  squadPlayers      SquadPlayer[]
+  matchEvents       MatchEvent[]             @relation("EventPlayer")
+  assistEvents      MatchEvent[]             @relation("EventAssist")
+  playerMatchStats  PlayerMatchStats[]
+  playerSeasonStats PlayerSeasonStats[]
+  lineupPlayers     LineupPlayer[]
+  injuries          PlayerInjury[]
+  nitboxAwards      NitboxAward[]
+  matchPredictions  PlayerMatchPrediction[]
+  trophies          Trophy[]
 
   @@map("players")
 }
@@ -327,15 +330,15 @@ model Player {
 // ---------------------------------------------------------------------------
 
 model Squad {
-  id                    Int                @id @default(autoincrement())
-  teamId                Int
-  team                  NationalTeam       @relation(fields: [teamId], references: [id])
-  competitionSeasonId   Int?
-  competitionSeason     CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
-  label                 String             @db.VarChar(100)  // "FIFA World Cup 2026 Squad"
-  announcedAt           DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  id                  Int                @id @default(autoincrement())
+  teamId              Int
+  team                NationalTeam       @relation(fields: [teamId], references: [id])
+  competitionSeasonId Int?
+  competitionSeason   CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
+  label               String             @db.VarChar(100)
+  announcedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   squadPlayers SquadPlayer[]
 
@@ -366,13 +369,11 @@ model SquadPlayer {
 // ENUMS
 // ---------------------------------------------------------------------------
 
-// Tracks how far along the data-pipeline a match has progressed.
-// Set internally by LiveSyncService / PreMatchService / EnrichService.
 enum EnrichStatus {
-  SCHEDULED           // Match exists in DB; no lineup data yet
-  LINEUPS_CONFIRMED   // Pre-match lineups seeded (≥ 45 min before KO)
-  LIVE                // Match currently in progress — live polling active
-  FULLY_ENRICHED      // Events + player stats + final lineups all seeded
+  SCHEDULED
+  LINEUPS_CONFIRMED
+  LIVE
+  FULLY_ENRICHED
 
   @@map("enrich_status")
 }
@@ -382,63 +383,61 @@ enum EnrichStatus {
 // ---------------------------------------------------------------------------
 
 model Match {
-  id                    Int               @id @default(autoincrement())
-  apiFootballId         Int               @unique               // fixture.id from GET /fixtures
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
-  groupId               Int?
-  group                 CompetitionGroup? @relation(fields: [groupId], references: [id])
-  homeTeamId            Int
-  homeTeam              NationalTeam      @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeamId            Int
-  awayTeam              NationalTeam      @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  venueId               Int?
-  venue                 Venue?            @relation(fields: [venueId], references: [id])
+  id                  Int               @id @default(autoincrement())
+  apiFootballId       Int               @unique
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  groupId             Int?
+  group               CompetitionGroup? @relation(fields: [groupId], references: [id])
+  homeTeamId          Int
+  homeTeam            NationalTeam      @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId          Int
+  awayTeam            NationalTeam      @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  venueId             Int?
+  venue               Venue?            @relation(fields: [venueId], references: [id])
 
-  // Scheduling — from fixture object
-  kickoffAt             DateTime
-  timezone              String?  @db.VarChar(50)
-  timestamp             Int?                                    // fixture.timestamp (Unix epoch)
-  periodFirstStart      Int?                                    // fixture.periods.first
-  periodSecondStart     Int?                                    // fixture.periods.second
+  kickoffAt           DateTime
+  timezone            String?  @db.VarChar(50)
+  periodFirstStart    Int?
+  periodSecondStart   Int?
 
-  // Status — from fixture.status
-  statusShort           String   @db.VarChar(10)               // "FT", "NS", "1H", "HT", "AET", "PEN"
-  statusLong            String?  @db.VarChar(50)               // "Match Finished", "Not Started"
-  statusElapsed         Int?                                    // fixture.status.elapsed (minute)
-  statusExtra           Int?                                    // fixture.status.extra
+  statusShort         String   @db.VarChar(10)   // "FT", "NS", "1H", "HT", "AET", "PEN"
+  statusElapsed       Int?
+  statusExtra         Int?
 
-  // Match info
-  matchday              Int?
-  roundLabel            String?  @db.VarChar(50)               // league.round e.g. "Group Stage - 1"
-  neutralVenue          Boolean  @default(false)
-  attendanceActual      Int?
-  refereeMain           String?  @db.VarChar(100)
+  matchday            Int?
+  roundLabel          String?  @db.VarChar(50)
+  neutralVenue        Boolean  @default(false)
+  attendanceActual    Int?
+  refereeMain         String?  @db.VarChar(100)
 
-  // Score — from score object
-  homeScore             Int?                                    // score.fulltime.home
-  awayScore             Int?                                    // score.fulltime.away
-  homeScoreHt           Int?                                    // score.halftime.home
-  awayScoreHt           Int?                                    // score.halftime.away
-  homeScoreEt           Int?                                    // score.extratime.home
-  awayScoreEt           Int?                                    // score.extratime.away
-  homePenScore          Int?                                    // score.penalty.home
-  awayPenScore          Int?                                    // score.penalty.away
+  homeScore           Int?
+  awayScore           Int?
+  homeScoreHt         Int?
+  awayScoreHt         Int?
+  homeScoreEt         Int?
+  awayScoreEt         Int?
+  homePenScore        Int?
+  awayPenScore        Int?
 
-  // Pipeline tracking — managed by LiveSyncService / PreMatchService / EnrichService
-  enrichStatus          EnrichStatus @default(SCHEDULED)
+  enrichStatus        EnrichStatus @default(SCHEDULED)
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  teamStatistics     MatchTeamStatistics[]
-  events             MatchEvent[]
-  lineups            MatchLineup[]
-  playerStats        PlayerMatchStats[]
-  nitboxAwards       NitboxAward[]
-  prediction         MatchPrediction?
-  playerPredictions  PlayerMatchPrediction[]
+  teamStatistics    MatchTeamStatistics[]
+  events            MatchEvent[]
+  lineups           MatchLineup[]
+  playerStats       PlayerMatchStats[]
+  nitboxAwards      NitboxAward[]
+  prediction        MatchPrediction?
+  playerPredictions PlayerMatchPrediction[]
 
+  @@index([competitionSeasonId, kickoffAt])
+  @@index([statusShort])
+  @@index([enrichStatus])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
   @@map("matches")
 }
 
@@ -447,45 +446,36 @@ model Match {
 // ---------------------------------------------------------------------------
 
 model MatchTeamStatistics {
-  id                 Int          @id @default(autoincrement())
-  matchId            Int
-  match              Match        @relation(fields: [matchId], references: [id])
-  teamId             Int
-  team               NationalTeam @relation(fields: [teamId], references: [id])
-  isHome             Boolean
+  id              Int          @id @default(autoincrement())
+  matchId         Int
+  match           Match        @relation(fields: [matchId], references: [id])
+  teamId          Int
+  team            NationalTeam @relation(fields: [teamId], references: [id])
+  // isHome removed — derivable from match.homeTeamId == teamId
 
-  // From GET /fixtures/statistics
-  possessionPct      Float?                // "Ball Possession" → parse "32%" → 32.0
-  shots              Int?                  // "Total Shots"
-  shotsOnTarget      Int?                  // "Shots on Goal"
-  shotsOffTarget     Int?                  // "Shots off Goal"
-  shotsBlocked       Int?                  // "Blocked Shots"
-  shotsInsideBox     Int?                  // "Shots insidebox"
-  shotsOutsideBox    Int?                  // "Shots outsidebox"
-  xG                 Float?                // "expected_goals"
-  xGOt               Float?                // xG on target (post-shot)
-  goalsPrevented     Float?                // "goals_prevented"
-  passes             Int?                  // "Total passes"
-  passesCompleted    Int?                  // "Passes accurate"
-  passAccuracyPct    Float?                // "Passes %"
-  crosses            Int?
-  crossesCompleted   Int?
-  corners            Int?                  // "Corner Kicks"
-  fouls              Int?                  // "Fouls"
-  yellowCards        Int?                  // "Yellow Cards"
-  redCards           Int?                  // "Red Cards"
-  offsides           Int?                  // "Offsides"
-  saves              Int?                  // "Goalkeeper Saves"
-  tackles            Int?
-  tacklesWon         Int?
-  interceptions      Int?
-  clearances         Int?
-  aerialDuels        Int?
-  aerialDuelsWon     Int?
-  formation          String?  @db.VarChar(10)   // "4-3-3"
+  possessionPct   Float?
+  shots           Int?
+  shotsOnTarget   Int?
+  shotsOffTarget  Int?
+  shotsBlocked    Int?
+  shotsInsideBox  Int?
+  shotsOutsideBox Int?
+  xG              Float?
+  xGOt            Float?
+  goalsPrevented  Float?
+  passes          Int?
+  passesCompleted Int?
+  passAccuracyPct Float?
+  corners         Int?
+  fouls           Int?
+  yellowCards     Int?
+  redCards        Int?
+  offsides        Int?
+  saves           Int?
+  // formation removed — use MatchLineup.formation
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([matchId, teamId])
   @@map("match_team_statistics")
@@ -496,28 +486,27 @@ model MatchTeamStatistics {
 // ---------------------------------------------------------------------------
 
 model MatchEvent {
-  id               Int          @id @default(autoincrement())
-  matchId          Int
-  match            Match        @relation(fields: [matchId], references: [id])
-  teamId           Int
-  team             NationalTeam @relation(fields: [teamId], references: [id])
-  playerId         Int?
-  player           Player?      @relation("EventPlayer", fields: [playerId], references: [id])
-  assistPlayerId   Int?
-  assistPlayer     Player?      @relation("EventAssist", fields: [assistPlayerId], references: [id])
+  id             Int          @id @default(autoincrement())
+  matchId        Int
+  match          Match        @relation(fields: [matchId], references: [id])
+  teamId         Int
+  team           NationalTeam @relation(fields: [teamId], references: [id])
+  playerId       Int?
+  player         Player?      @relation("EventPlayer", fields: [playerId], references: [id])
+  assistPlayerId Int?
+  assistPlayer   Player?      @relation("EventAssist", fields: [assistPlayerId], references: [id])
 
-  // From GET /fixtures/events
-  minute           Int
-  extraTime        Int?                            // time.extra
-  type             String   @db.VarChar(30)        // "Goal", "Card", "subst", "Var"
-  detail           String?  @db.VarChar(100)       // "Normal Goal", "Own Goal", "Penalty", "Yellow Card", "Red Card"
-  comments         String?  @db.VarChar(255)       // comments field from API
-  scoreHome        Int?                            // running score at time of event
-  scoreAway        Int?
+  minute         Int
+  extraTime      Int?
+  type           String   @db.VarChar(30)    // "Goal", "Card", "subst", "Var"
+  detail         String?  @db.VarChar(100)
+  comments       String?  @db.VarChar(255)
+  // scoreHome/Away removed — derived from sequential event log
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@index([matchId, minute])
   @@map("match_events")
 }
 
@@ -532,7 +521,7 @@ model MatchLineup {
   teamId    Int
   team      NationalTeam @relation(fields: [teamId], references: [id])
   coachId   Int?
-  coach     Coach?       @relation(fields: [coachId], references: [id])  // coach.id from GET /fixtures/lineups
+  coach     Coach?       @relation(fields: [coachId], references: [id])
   formation String?      @db.VarChar(10)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -548,21 +537,20 @@ model MatchLineup {
 // ---------------------------------------------------------------------------
 
 model LineupPlayer {
-  id             Int         @id @default(autoincrement())
-  lineupId       Int
-  lineup         MatchLineup @relation(fields: [lineupId], references: [id])
-  playerId       Int
-  player         Player      @relation(fields: [playerId], references: [id])
+  id           Int         @id @default(autoincrement())
+  lineupId     Int
+  lineup       MatchLineup @relation(fields: [lineupId], references: [id])
+  playerId     Int
+  player       Player      @relation(fields: [playerId], references: [id])
 
-  // From GET /fixtures/lineups → startXI[].player
-  shirtNumber    Int?
-  positionCode   String?  @db.VarChar(10)   // "GK", "CB", "ST" (pos field)
-  gridPosition   String?  @db.VarChar(10)   // "1:1", "2:3" (grid field — raw API string)
-  isStarter      Boolean  @default(true)
-  subbedInMin    Int?
-  subbedOutMin   Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  shirtNumber  Int?
+  positionCode String?  @db.VarChar(10)
+  gridPosition String?  @db.VarChar(10)
+  isStarter    Boolean  @default(true)
+  subbedInMin  Int?                       // derived from match events — stored for convenience
+  subbedOutMin Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([lineupId, playerId])
   @@map("lineup_players")
@@ -573,69 +561,62 @@ model LineupPlayer {
 // ---------------------------------------------------------------------------
 
 model PlayerMatchStats {
-  id                  Int          @id @default(autoincrement())
-  matchId             Int
-  match               Match        @relation(fields: [matchId], references: [id])
-  playerId            Int
-  player              Player       @relation(fields: [playerId], references: [id])
-  teamId              Int
-  team                NationalTeam @relation(fields: [teamId], references: [id])
+  id                Int          @id @default(autoincrement())
+  matchId           Int
+  match             Match        @relation(fields: [matchId], references: [id])
+  playerId          Int
+  player            Player       @relation(fields: [playerId], references: [id])
+  teamId            Int
+  team              NationalTeam @relation(fields: [teamId], references: [id])
 
-  // From GET /fixtures/players → statistics[0]
-  minutesPlayed       Int?                       // games.minutes
-  rating              Float?                     // games.rating (parse string "6.3" → 6.3)
-  captain             Boolean  @default(false)   // games.captain
-  substitute          Boolean  @default(false)   // games.substitute
+  minutesPlayed     Int?
+  rating            Float?
+  captain           Boolean  @default(false)
+  substitute        Boolean  @default(false)
 
-  // Attacking
-  goals               Int      @default(0)       // goals.total
-  goalsConceded       Int?                       // goals.conceded (goalkeeper)
-  assists             Int      @default(0)       // goals.assists
-  saves               Int?                       // goals.saves (goalkeeper)
-  shots               Int?                       // shots.total
-  shotsOnTarget       Int?                       // shots.on
-  xG                  Float?
-  xA                  Float?
+  goals             Int      @default(0)
+  goalsConceded     Int?
+  assists           Int      @default(0)
+  saves             Int?
+  shots             Int?
+  shotsOnTarget     Int?
+  xG                Float?
+  xA                Float?
 
-  // Passing
-  passes              Int?                       // passes.total
-  passesCompleted     Int?
-  passAccuracyPct     Float?                     // passes.accuracy (parse "68%")
-  keyPasses           Int?                       // passes.key
+  passes            Int?
+  passesCompleted   Int?
+  passAccuracyPct   Float?
+  keyPasses         Int?
 
-  // Defending
-  tackles             Int?                       // tackles.total
-  blockedShots        Int?                       // tackles.blocks
-  interceptions       Int?                       // tackles.interceptions
-  clearances          Int?
+  tackles           Int?
+  blockedShots      Int?
+  interceptions     Int?
+  clearances        Int?
 
-  // Duels
-  duelsTotal          Int?                       // duels.total
-  duelsWon            Int?                       // duels.won
+  duelsTotal        Int?
+  duelsWon          Int?
 
-  // Dribbles
-  dribbles            Int?                       // dribbles.attempts
-  dribblesCompleted   Int?                       // dribbles.success
-  dribblesPast        Int?                       // dribbles.past (opponents who dribbled past this player)
+  dribbles          Int?
+  dribblesCompleted Int?
+  dribblesPast      Int?
 
-  // Discipline
-  foulsCommitted      Int?                       // fouls.committed
-  foulsSuffered       Int?                       // fouls.drawn
-  yellowCards         Int      @default(0)
-  redCards            Int      @default(0)
-  offsides            Int?                       // offsides (top-level field in API)
+  foulsCommitted    Int?
+  foulsSuffered     Int?
+  yellowCards       Int      @default(0)
+  redCards          Int      @default(0)
+  offsides          Int?
 
-  // Penalty
-  penaltyWon          Int?                       // penalty.won
-  penaltyCommitted    Int?                       // penalty.commited (API typo preserved)
-  penaltyScored       Int?                       // penalty.scored
-  penaltyMissed       Int?                       // penalty.missed
-  penaltySaved        Int?                       // penalty.saved
+  penaltyWon        Int?
+  penaltyCommitted  Int?
+  penaltyScored     Int?
+  penaltyMissed     Int?
+  penaltySaved      Int?
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([matchId, playerId])
+  @@index([playerId])
   @@map("player_match_stats")
 }
 
@@ -644,45 +625,45 @@ model PlayerMatchStats {
 // ---------------------------------------------------------------------------
 
 model PlayerSeasonStats {
-  id                    Int               @id @default(autoincrement())
-  playerId              Int
-  player                Player            @relation(fields: [playerId], references: [id])
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
-  teamId                Int
-  team                  NationalTeam      @relation(fields: [teamId], references: [id])
+  id                  Int               @id @default(autoincrement())
+  playerId            Int
+  player              Player            @relation(fields: [playerId], references: [id])
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  teamId              Int
+  team                NationalTeam      @relation(fields: [teamId], references: [id])
 
-  // Aggregated from GET /players?league=X&season=Y
-  appearances           Int      @default(0)
-  starts                Int      @default(0)
-  minutesPlayed         Int      @default(0)
-  goals                 Int      @default(0)
-  assists               Int      @default(0)
-  xG                    Float?
-  xA                    Float?
-  shots                 Int?
-  shotsOnTarget         Int?
-  passes                Int?
-  passesCompleted       Int?
-  keyPasses             Int?
-  dribbles              Int?
-  dribblesCompleted     Int?
-  tackles               Int?
-  interceptions         Int?
-  clearances            Int?
-  foulsCommitted        Int?
-  foulsSuffered         Int?
-  saves                 Int?
-  yellowCards           Int      @default(0)
-  redCards              Int      @default(0)
-  penaltyScored         Int?
-  penaltyMissed         Int?
-  averageRating         Float?   // computed: avg of PlayerMatchStats.rating for this season
+  appearances         Int      @default(0)
+  starts              Int      @default(0)   // games.lineups from API
+  minutesPlayed       Int      @default(0)
+  goals               Int      @default(0)
+  assists             Int      @default(0)
+  xG                  Float?
+  xA                  Float?
+  shots               Int?
+  shotsOnTarget       Int?
+  passes              Int?
+  passesCompleted     Int?
+  keyPasses           Int?
+  dribbles            Int?
+  dribblesCompleted   Int?
+  tackles             Int?
+  interceptions       Int?
+  clearances          Int?
+  foulsCommitted      Int?
+  foulsSuffered       Int?
+  saves               Int?
+  yellowCards         Int      @default(0)
+  redCards            Int      @default(0)
+  penaltyScored       Int?
+  penaltyMissed       Int?
+  averageRating       Float?   // computed from PlayerMatchStats
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([playerId, competitionSeasonId, teamId])
+  @@index([competitionSeasonId, goals])
   @@map("player_season_stats")
 }
 
@@ -691,73 +672,58 @@ model PlayerSeasonStats {
 // ---------------------------------------------------------------------------
 
 model TeamSeasonStats {
-  id                    Int               @id @default(autoincrement())
-  teamId                Int
-  team                  NationalTeam      @relation(fields: [teamId], references: [id])
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  id                  Int               @id @default(autoincrement())
+  teamId              Int
+  team                NationalTeam      @relation(fields: [teamId], references: [id])
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
 
-  // From GET /teams/statistics
-  form                  String?  @db.VarChar(30)   // "WDLDWW..."
+  form                String?  @db.VarChar(30)
 
-  // Fixtures totals
-  matchesPlayed         Int      @default(0)
-  wins                  Int      @default(0)
-  draws                 Int      @default(0)
-  losses                Int      @default(0)
+  matchesPlayed       Int      @default(0)
+  wins                Int      @default(0)
+  draws               Int      @default(0)
+  losses              Int      @default(0)
 
-  // Home split
-  homeMatchesPlayed     Int      @default(0)
-  homeWins              Int      @default(0)
-  homeDraws             Int      @default(0)
-  homeLosses            Int      @default(0)
+  homeMatchesPlayed   Int      @default(0)
+  homeWins            Int      @default(0)
+  homeDraws           Int      @default(0)
+  homeLosses          Int      @default(0)
 
-  // Away split
-  awayMatchesPlayed     Int      @default(0)
-  awayWins              Int      @default(0)
-  awayDraws             Int      @default(0)
-  awayLosses            Int      @default(0)
+  awayMatchesPlayed   Int      @default(0)
+  awayWins            Int      @default(0)
+  awayDraws           Int      @default(0)
+  awayLosses          Int      @default(0)
 
-  // Goals
-  goalsFor              Int      @default(0)
-  goalsAgainst          Int      @default(0)
-  goalsForHome          Int      @default(0)
-  goalsForAway          Int      @default(0)
-  goalsAgainstHome      Int      @default(0)
-  goalsAgainstAway      Int      @default(0)
-  goalsForAvg           Float?
-  goalsAgainstAvg       Float?
+  goalsFor            Int      @default(0)
+  goalsAgainst        Int      @default(0)
+  goalsForHome        Int      @default(0)
+  goalsForAway        Int      @default(0)
+  goalsAgainstHome    Int      @default(0)
+  goalsAgainstAway    Int      @default(0)
+  goalsForAvg         Float?   // from API: goals.for.average.total
+  goalsAgainstAvg     Float?   // from API: goals.against.average.total
 
-  // Special
-  cleanSheets           Int      @default(0)
-  cleanSheetsHome       Int      @default(0)
-  cleanSheetsAway       Int      @default(0)
-  failedToScore         Int      @default(0)       // failed_to_score.total
+  cleanSheets         Int      @default(0)
+  cleanSheetsHome     Int      @default(0)
+  cleanSheetsAway     Int      @default(0)
+  failedToScore       Int      @default(0)
 
-  // Biggest results
-  biggestWinHome        String?  @db.VarChar(10)   // "4-0"
-  biggestWinAway        String?  @db.VarChar(10)
-  biggestLossHome       String?  @db.VarChar(10)
-  biggestLossAway       String?  @db.VarChar(10)
+  biggestWinHome      String?  @db.VarChar(10)
+  biggestWinAway      String?  @db.VarChar(10)
+  biggestLossHome     String?  @db.VarChar(10)
+  biggestLossAway     String?  @db.VarChar(10)
 
-  // Streaks
-  winStreak             Int?
-  drawStreak            Int?
-  lossStreak            Int?
+  winStreak           Int?
+  drawStreak          Int?
+  lossStreak          Int?
 
-  // Penalties
-  penaltiesScored       Int?
-  penaltiesMissed       Int?
-  penaltiesTotal        Int?
+  penaltiesScored     Int?
+  penaltiesMissed     Int?
+  penaltiesTotal      Int?
 
-  // Averages
-  avgPossessionPct      Float?
-  avgXG                 Float?
-  avgXGAgainst          Float?
-  avgPassAccuracyPct    Float?
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([teamId, competitionSeasonId])
   @@map("team_season_stats")
@@ -766,18 +732,30 @@ model TeamSeasonStats {
 // ---------------------------------------------------------------------------
 // TROPHIES
 // ---------------------------------------------------------------------------
+// Supports team trophies (won World Cup), player trophies (Golden Boot),
+// and coach trophies. Exactly one of teamId/playerId/coachId should be set.
+// type distinguishes the award: "champion", "runner_up", "golden_boot", etc.
 
 model Trophy {
-  id                    Int               @id @default(autoincrement())
-  teamId                Int
-  team                  NationalTeam      @relation(fields: [teamId], references: [id])
-  competitionSeasonId   Int
-  competitionSeason     CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
-  placement             Int               // 1 = champion, 2 = runner-up, 3 = third
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                  Int               @id @default(autoincrement())
+  competitionSeasonId Int
+  competitionSeason   CompetitionSeason @relation(fields: [competitionSeasonId], references: [id])
+  type                String            @db.VarChar(50)  // "champion", "runner_up", "golden_boot", "golden_ball", "golden_glove"
+  placement           Int?                               // 1 = winner, 2 = runner-up (for team trophies)
 
-  @@unique([teamId, competitionSeasonId])
+  teamId    Int?
+  team      NationalTeam? @relation(fields: [teamId], references: [id])
+  playerId  Int?
+  player    Player?       @relation(fields: [playerId], references: [id])
+  coachId   Int?
+  coach     Coach?        @relation(fields: [coachId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, type, competitionSeasonId])
+  @@unique([playerId, type, competitionSeasonId])
+  @@unique([coachId, type, competitionSeasonId])
   @@map("trophies")
 }
 
@@ -786,18 +764,20 @@ model Trophy {
 // ---------------------------------------------------------------------------
 
 model PlayerInjury {
-  id             Int       @id @default(autoincrement())
-  playerId       Int
-  player         Player    @relation(fields: [playerId], references: [id])
-  injuryType     String    @db.VarChar(100)   // "hamstring", "knee", "muscle"
-  bodyPart       String?   @db.VarChar(50)
-  startDate      DateTime  @db.Date
-  endDate        DateTime? @db.Date
-  matchesMissed  Int?
-  severity       String?   @db.VarChar(20)    // "minor", "moderate", "severe"
-  notes          String?   @db.Text
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                  Int                @id @default(autoincrement())
+  playerId            Int
+  player              Player             @relation(fields: [playerId], references: [id])
+  competitionSeasonId Int?
+  competitionSeason   CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
+  injuryType          String             @db.VarChar(100)
+  bodyPart            String?            @db.VarChar(50)
+  startDate           DateTime           @db.Date
+  endDate             DateTime?          @db.Date
+  matchesMissed       Int?
+  severity            String?            @db.VarChar(20)
+  notes               String?            @db.Text
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   @@map("player_injuries")
 }
@@ -805,34 +785,32 @@ model PlayerInjury {
 // ---------------------------------------------------------------------------
 // NITBOX AWARDS
 // ---------------------------------------------------------------------------
-// Algorithmically calculated awards. score is the computed metric that won it.
-// matchId is set for per-match awards; competitionSeasonId for season awards.
 
 enum NitboxAwardType {
-  PLAYER_OF_MATCH      // Highest weighted score in a single match
-  PLAYER_OF_SEASON     // Best overall season rating across competition
-  PLAYER_OF_CUP        // Best performer across all rounds of a cup competition
-  BEST_DEFENSIVE       // Highest combined defensive actions across season
+  PLAYER_OF_MATCH
+  PLAYER_OF_SEASON
+  PLAYER_OF_CUP
+  BEST_DEFENSIVE
 
   @@map("nitbox_award_type")
 }
 
 model NitboxAward {
-  id                    Int              @id @default(autoincrement())
-  type                  NitboxAwardType
-  playerId              Int
-  player                Player           @relation(fields: [playerId], references: [id])
-  matchId               Int?             // Set for PLAYER_OF_MATCH only
-  match                 Match?           @relation(fields: [matchId], references: [id])
-  competitionSeasonId   Int?             // Set for season/cup awards
-  competitionSeason     CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
-  seasonYear            Int              // e.g. 2025
-  score                 Float            // The calculated metric value that won the award
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  id                  Int              @id @default(autoincrement())
+  type                NitboxAwardType
+  playerId            Int
+  player              Player           @relation(fields: [playerId], references: [id])
+  matchId             Int?
+  match               Match?           @relation(fields: [matchId], references: [id])
+  competitionSeasonId Int?
+  competitionSeason   CompetitionSeason? @relation(fields: [competitionSeasonId], references: [id])
+  seasonYear          Int
+  score               Float
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  @@unique([type, matchId])              // One PLAYER_OF_MATCH per match
-  @@unique([type, competitionSeasonId])  // One season award per competition per type
+  @@unique([type, matchId])
+  @@unique([type, competitionSeasonId])
   @@map("nitbox_awards")
 }
 
@@ -840,43 +818,32 @@ model NitboxAward {
 // ML PREDICTIONS
 // ---------------------------------------------------------------------------
 
-// One prediction record per match — stores the winning model's probabilities
-// and all individual model scores for transparency (modelScores JSON).
 model MatchPrediction {
-  id               Int      @id @default(autoincrement())
-  matchId          Int      @unique
-  match            Match    @relation(fields: [matchId], references: [id])
-
-  // Winning model output
-  modelVersion     String   @db.VarChar(50)   // e.g. "gradient_boosting_v1"
-  homeWinProb      Float                       // 0.0 – 1.0
-  drawProb         Float
-  awayWinProb      Float
-  predictedResult  String   @db.VarChar(10)   // "HOME" | "DRAW" | "AWAY"
-  confidence       Float                       // max(homeWinProb, drawProb, awayWinProb)
-
-  // All model scores for display / debugging
-  // Shape: { logistic_regression: 0.71, knn: 0.68, random_forest: 0.74, ... }
-  modelScores      Json
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  matchId         Int      @unique
+  match           Match    @relation(fields: [matchId], references: [id])
+  modelVersion    String   @db.VarChar(50)
+  homeWinProb     Float
+  drawProb        Float
+  awayWinProb     Float
+  predictedResult String   @db.VarChar(10)   // "HOME" | "DRAW" | "AWAY"
+  confidence      Float
+  modelScores     Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("match_predictions")
 }
 
-// Per-player predictions for upcoming matches (e.g. expected goals, rating)
 model PlayerMatchPrediction {
   id               Int      @id @default(autoincrement())
   matchId          Int
   match            Match    @relation(fields: [matchId], references: [id])
   playerId         Int
   player           Player   @relation(fields: [playerId], references: [id])
-
-  predictedRating  Float?   // Expected rating 1–10
-  predictedGoals   Float?   // Expected goals
-  predictedAssists Float?   // Expected assists
-
+  predictedRating  Float?
+  predictedGoals   Float?
+  predictedAssists Float?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

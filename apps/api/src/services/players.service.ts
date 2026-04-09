@@ -1,11 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
-
-const ML_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:3003'
 
 @Injectable()
 export class PlayersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async findOne(id: number) {
     const player = await this.prisma.player.findUnique({
@@ -65,12 +67,13 @@ export class PlayersService {
     const player = await this.prisma.player.findUnique({ where: { id }, select: { id: true } })
     if (!player) throw new NotFoundException(`Player ${id} not found`)
 
+    const mlUrl = this.config.get<string>('ML_SERVICE_URL', 'http://localhost:3003')
     try {
-      const res = await fetch(`${ML_URL}/ratings/player/${id}`)
+      const res = await fetch(`${mlUrl}/ratings/player/${id}`)
       if (!res.ok) return null
       return res.json()
     } catch {
-      return null
+      throw new ServiceUnavailableException('ML rating service is unavailable')
     }
   }
 

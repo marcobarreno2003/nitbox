@@ -15,6 +15,7 @@ export class StandingsService {
       },
       include: {
         team: { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        group: { select: { id: true, name: true, stage: true } },
         competitionSeason: { include: { competition: true } },
       },
       orderBy: { position: 'asc' },

@@ -19,6 +19,45 @@ import { enrichMatch } from '../helpers/enrich-match';
 const FINAL_STATUSES    = new Set(['FT', 'AET', 'PEN']);
 const UPCOMING_STATUSES = new Set(['NS', 'TBD', 'PST', 'CANC', 'AWD', 'WO']);
 
+// ─── Venue upsert from fixture data ──────────────────────────────────────────
+// Creates venue rows for match venues not already in the DB (e.g. neutral sites).
+
+async function upsertVenue(
+  prisma:    PrismaClient,
+  f:         ApiFixture,
+  venueMap:  Map<number, number>,
+  teamMap:   Map<number, number>,
+): Promise<number | null> {
+  const v = f.fixture.venue;
+  if (!v.id) return null;
+  if (venueMap.has(v.id)) return venueMap.get(v.id)!;
+
+  // Resolve countryId from home team (best proxy for venue country)
+  const homeTeamDbId = teamMap.get(f.teams.home.id);
+  const homeTeam = homeTeamDbId
+    ? await prisma.nationalTeam.findUnique({ where: { id: homeTeamDbId }, select: { countryId: true } })
+    : null;
+  const countryId = homeTeam?.countryId ?? null;
+  if (!countryId) return null;
+
+  // Try by apiFootballId first, fall back to (name, countryId) to handle
+  // cases where the same stadium appears under different API IDs
+  let venue = await prisma.venue.findUnique({ where: { apiFootballId: v.id } });
+
+  if (!venue) {
+    venue = await prisma.venue.findUnique({ where: { name_countryId: { name: v.name, countryId } } });
+  }
+
+  if (venue) {
+    await prisma.venue.update({ where: { id: venue.id }, data: { name: v.name, city: v.city, apiFootballId: v.id } });
+  } else {
+    venue = await prisma.venue.create({ data: { apiFootballId: v.id, name: v.name, city: v.city, countryId } });
+  }
+
+  venueMap.set(v.id, venue.id);
+  return venue.id;
+}
+
 // ─── Shared lookup loader ─────────────────────────────────────────────────────
 
 async function loadMaps(prisma: PrismaClient) {
@@ -70,12 +109,23 @@ async function seedByCompetition(
       teamMap.has(f.teams.away.id),
     );
 
-    console.log(`  ${finished.length} finished matches`);
+    // Pre-load known fixture IDs to skip already-enriched matches (BUG-9)
+    const existingIds = new Set<number>(
+      (await prisma.match.findMany({
+        where:  { apiFootballId: { in: finished.map(f => f.fixture.id) } },
+        select: { apiFootballId: true, enrichStatus: true },
+      }))
+        .filter(m => m.enrichStatus === 'FULLY_ENRICHED')
+        .map(m => m.apiFootballId),
+    );
 
-    for (const f of finished) {
+    const toProcess = finished.filter(f => !existingIds.has(f.fixture.id));
+    console.log(`  ${finished.length} finished (${existingIds.size} already enriched, ${toProcess.length} to process)`);
+
+    for (const f of toProcess) {
       const homeDbId = teamMap.get(f.teams.home.id)!;
       const awayDbId = teamMap.get(f.teams.away.id)!;
-      const venueId  = f.fixture.venue.id ? (venueMap.get(f.fixture.venue.id) ?? null) : null;
+      const venueId  = await upsertVenue(prisma, f, venueMap, teamMap);
 
       const match = await prisma.match.upsert({
         where:  { apiFootballId: f.fixture.id },
@@ -160,7 +210,7 @@ async function seedByTeam(
         try {
           const compDbId   = await ensureCompetition(prisma, f.league.id, f.league.name, competitionMap);
           const seasonDbId = await ensureSeason(prisma, compDbId, f.league.id, f.league.season, seasonMap);
-          const venueId    = f.fixture.venue.id ? (venueMap.get(f.fixture.venue.id) ?? null) : null;
+          const venueId    = await upsertVenue(prisma, f, venueMap, teamMap);
 
           if (FINAL_STATUSES.has(status)) {
             // Finished — upsert base record then enrich
@@ -182,7 +232,7 @@ async function seedByTeam(
             await enrichMatch(prisma, match.id, f.fixture.id, matchTeamMap);
 
           } else if (UPCOMING_STATUSES.has(status)) {
-            // Upcoming — upsert (update kickoff/status, never overwrite enrichStatus)
+            // Upcoming — use matchUpdateData (no timestamp/statusLong in schema)
             const existing = await prisma.match.findUnique({
               where:  { apiFootballId: f.fixture.id },
               select: { id: true },
@@ -190,15 +240,7 @@ async function seedByTeam(
 
             await prisma.match.upsert({
               where:  { apiFootballId: f.fixture.id },
-              update: {
-                kickoffAt:     new Date(f.fixture.date),
-                timestamp:     f.fixture.timestamp,
-                statusShort:   f.fixture.status.short,
-                statusLong:    f.fixture.status.long,
-                statusElapsed: f.fixture.status.elapsed,
-                statusExtra:   f.fixture.status.extra,
-                roundLabel:    f.league.round,
-              },
+              update: matchUpdateData(f),
               create: matchCreateData(f, seasonDbId, homeDbId, awayDbId, venueId),
             });
 

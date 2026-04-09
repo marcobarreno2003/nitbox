@@ -50,7 +50,7 @@ export class TeamsService {
     const squad = await this.prisma.squad.findFirst({
       where: { teamId: id, competitionSeasonId: null },
     })
-    if (!squad) return []
+    if (!squad) throw new NotFoundException(`No squad found for team ${id}`)
     return this.prisma.squadPlayer.findMany({
       where: { squadId: squad.id },
       include: {

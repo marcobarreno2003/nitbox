@@ -78,11 +78,18 @@ export class StandingsLiveService {
     stats.played++
     stats.goalDifference = stats.goalsFor - stats.goalsAgainst
 
-    await this.prisma.standing.upsert({
-      where: { competitionSeasonId_groupId_teamId: { competitionSeasonId, groupId: groupId ?? 0, teamId } },
-      create: { competitionSeasonId, groupId, teamId, position: 0, ...stats },
-      update: stats,
+    // Use findFirst + update/create to handle nullable groupId in compound unique key
+    // (Prisma upsert doesn't support null in compound unique — NULL != NULL in PostgreSQL)
+    const existing = await this.prisma.standing.findFirst({
+      where: { competitionSeasonId, groupId: groupId ?? undefined, teamId },
     })
+    if (existing) {
+      await this.prisma.standing.update({ where: { id: existing.id }, data: stats })
+    } else {
+      await this.prisma.standing.create({
+        data: { competitionSeasonId, groupId, teamId, position: 0, ...stats },
+      })
+    }
   }
 
   // ── Final (called by EnrichService after match is fully enriched) ─────────────
@@ -124,11 +131,19 @@ export class StandingsLiveService {
       for (let i = 0; i < sorted.length; i++) {
         const teamId = sorted[i]
         const stats  = teamStats[teamId]
-        await this.prisma.standing.upsert({
-          where: { competitionSeasonId_groupId_teamId: { competitionSeasonId, groupId: groupId ?? 0, teamId } },
-          create: { competitionSeasonId, groupId, teamId, position: i + 1, ...stats },
-          update: { position: i + 1, ...stats },
+        const updateData = { position: i + 1, ...stats }
+
+        // Use findFirst + update/create to handle nullable groupId in compound unique key
+        const existing = await this.prisma.standing.findFirst({
+          where: { competitionSeasonId, groupId: groupId ?? undefined, teamId },
         })
+        if (existing) {
+          await this.prisma.standing.update({ where: { id: existing.id }, data: updateData })
+        } else {
+          await this.prisma.standing.create({
+            data: { competitionSeasonId, groupId, teamId, ...updateData },
+          })
+        }
       }
 
       this.logger.log(`Final standings recalculated for season ${competitionSeasonId} / group ${groupId}`)

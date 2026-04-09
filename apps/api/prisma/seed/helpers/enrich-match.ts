@@ -1,12 +1,9 @@
 // =============================================================================
-// Shared match enrichment helpers used by multiple seeders.
+// Shared match enrichment helpers.
 //
-// Called after a match reaches FT / AET / PEN status to persist the full
-// post-match dataset: player stats, lineups, team stats, events, and the
-// PLAYER_OF_MATCH NitboxAward.
-//
-// All functions are idempotent — they check for existing rows and skip or
-// upsert accordingly, so they are safe to call multiple times.
+// All functions are idempotent — safe to call multiple times.
+// playerMap (apiFootballId → db id) is pre-loaded once in enrichMatch and
+// passed down to avoid N+1 lookups across all enrichment steps.
 // =============================================================================
 
 import { PrismaClient } from '@prisma/client';
@@ -17,10 +14,10 @@ import { apiGet, DailyLimitError } from '../api';
 interface ApiStatEntry { type: string; value: string | number | null }
 
 interface ApiEvent {
-  time:   { elapsed: number; extra: number | null };
-  team:   { id: number };
-  player: { id: number | null; name: string | null };
-  assist: { id: number | null; name: string | null };
+  time:    { elapsed: number; extra: number | null };
+  team:    { id: number };
+  player:  { id: number | null; name: string | null };
+  assist:  { id: number | null; name: string | null };
   type:    string;
   detail:  string;
   comments: string | null;
@@ -81,8 +78,12 @@ export async function enrichPlayerStats(
   matchId:   number,
   fixtureId: number,
   teamMap:   Map<number, number>,
+  playerMap: Map<number, number>,
 ): Promise<void> {
-  // Idempotent: skip if already populated (update path handles re-runs)
+  // Skip API call if stats already exist for this match
+  const existingCount = await prisma.playerMatchStats.count({ where: { matchId } });
+  if (existingCount > 0) return;
+
   const teamStats = await apiGet<ApiPlayerStatsResponse>('fixtures/players', { fixture: fixtureId });
 
   for (const ts of teamStats) {
@@ -92,14 +93,19 @@ export async function enrichPlayerStats(
     for (const entry of ts.players) {
       if (!entry.player?.id) continue;
 
-      const player = await prisma.player.findUnique({ where: { apiFootballId: entry.player.id } });
-      if (!player) continue;
+      const playerDbId = playerMap.get(entry.player.id);
+      if (!playerDbId) continue;
 
       const s = entry.statistics[0];
       if (!s) continue;
 
-      const rating      = s.games.rating    ? parseFloat(s.games.rating) : null;
-      const passAcc     = s.passes.accuracy ? parseFloat(String(s.passes.accuracy).replace('%', '')) : null;
+      const rating  = s.games.rating    ? parseFloat(s.games.rating) : null;
+      const passAcc = s.passes.accuracy ? parseFloat(String(s.passes.accuracy).replace('%', '')) : null;
+
+      // passesCompleted: derived from accuracy × total (API doesn't return it directly)
+      const passesCompleted = (passAcc !== null && s.passes.total !== null)
+        ? Math.round((passAcc / 100) * s.passes.total)
+        : null;
 
       const playerStatFields = {
         minutesPlayed:     s.games.minutes,
@@ -113,11 +119,13 @@ export async function enrichPlayerStats(
         shots:             s.shots.total,
         shotsOnTarget:     s.shots.on,
         passes:            s.passes.total,
+        passesCompleted,
         keyPasses:         s.passes.key,
         passAccuracyPct:   (passAcc !== null && !isNaN(passAcc)) ? passAcc : null,
         tackles:           s.tackles.total,
         blockedShots:      s.tackles.blocks,
         interceptions:     s.tackles.interceptions,
+        clearances:        null,  // not available per-player in API-Football v3
         duelsTotal:        s.duels.total,
         duelsWon:          s.duels.won,
         dribbles:          s.dribbles.attempts,
@@ -136,8 +144,8 @@ export async function enrichPlayerStats(
       };
 
       await prisma.playerMatchStats.upsert({
-        where:  { matchId_playerId: { matchId, playerId: player.id } },
-        create: { matchId, playerId: player.id, teamId: teamDbId, ...playerStatFields },
+        where:  { matchId_playerId: { matchId, playerId: playerDbId } },
+        create: { matchId, playerId: playerDbId, teamId: teamDbId, ...playerStatFields },
         update: playerStatFields,
       });
     }
@@ -151,33 +159,21 @@ export async function enrichMatchEvents(
   matchId:   number,
   fixtureId: number,
   teamMap:   Map<number, number>,
+  playerMap: Map<number, number>,
 ): Promise<void> {
-  const events = await apiGet<ApiEvent>('fixtures/events', { fixture: fixtureId });
-
-  // Events are immutable after FT — skip if API returned the same count we already have
+  // Check DB first — events are immutable after FT, skip API call entirely if already populated
   const existing = await prisma.matchEvent.count({ where: { matchId } });
-  if (existing > 0 && existing === events.length) return;
+  if (existing > 0) return;
 
-  // Delete and recreate if count differs (partial save from a previous run)
-  if (existing > 0) {
-    await prisma.matchEvent.deleteMany({ where: { matchId } });
-  }
+  const events = await apiGet<ApiEvent>('fixtures/events', { fixture: fixtureId });
+  if (!events.length) return;
 
   for (const e of events) {
     const teamDbId = teamMap.get(e.team.id);
     if (!teamDbId) continue;
 
-    let playerDbId: number | null = null;
-    let assistDbId:  number | null = null;
-
-    if (e.player.id) {
-      const p = await prisma.player.findUnique({ where: { apiFootballId: e.player.id } });
-      playerDbId = p?.id ?? null;
-    }
-    if (e.assist.id) {
-      const a = await prisma.player.findUnique({ where: { apiFootballId: e.assist.id } });
-      assistDbId = a?.id ?? null;
-    }
+    const playerDbId = e.player.id ? (playerMap.get(e.player.id) ?? null) : null;
+    const assistDbId  = e.assist.id  ? (playerMap.get(e.assist.id)  ?? null) : null;
 
     await prisma.matchEvent.create({
       data: {
@@ -190,7 +186,7 @@ export async function enrichMatchEvents(
         type:           e.type,
         detail:         e.detail,
         comments:       e.comments,
-      },
+      } as any,
     });
   }
 }
@@ -202,6 +198,7 @@ export async function enrichLineups(
   matchId:   number,
   fixtureId: number,
   teamMap:   Map<number, number>,
+  playerMap: Map<number, number>,
 ): Promise<void> {
   const lineups = await apiGet<ApiLineupResponse>('fixtures/lineups', { fixture: fixtureId });
 
@@ -228,23 +225,23 @@ export async function enrichLineups(
 
     for (const lp of allPlayers) {
       if (!lp.id) continue;
-      const player = await prisma.player.findUnique({ where: { apiFootballId: lp.id } });
-      if (!player) continue;
+      const playerDbId = playerMap.get(lp.id);
+      if (!playerDbId) continue;
 
       await prisma.lineupPlayer.upsert({
-        where:  { lineupId_playerId: { lineupId: matchLineup.id, playerId: player.id } },
+        where:  { lineupId_playerId: { lineupId: matchLineup.id, playerId: playerDbId } },
         create: {
           lineupId:     matchLineup.id,
-          playerId:     player.id,
-          shirtNumber:  lp.number   ?? null,
-          positionCode: lp.pos      ?? null,
-          gridPosition: lp.grid     ?? null,
+          playerId:     playerDbId,
+          shirtNumber:  lp.number ?? null,
+          positionCode: lp.pos    ?? null,
+          gridPosition: lp.grid   ?? null,
           isStarter:    lp.isStarter,
         },
         update: {
-          shirtNumber:  lp.number   ?? null,
-          positionCode: lp.pos      ?? null,
-          gridPosition: lp.grid     ?? null,
+          shirtNumber:  lp.number ?? null,
+          positionCode: lp.pos    ?? null,
+          gridPosition: lp.grid   ?? null,
           isStarter:    lp.isStarter,
         },
       });
@@ -279,6 +276,7 @@ export async function enrichTeamStats(
       shotsInsideBox:  parseStat(s, 'Shots insidebox'),
       shotsOutsideBox: parseStat(s, 'Shots outsidebox'),
       xG:              parseStat(s, 'expected_goals'),
+      xGOt:            parseStat(s, 'expected_goals_on_target'),
       goalsPrevented:  parseStat(s, 'goals_prevented'),
       passes:          parseStat(s, 'Total passes'),
       passesCompleted: parseStat(s, 'Passes accurate'),
@@ -293,32 +291,13 @@ export async function enrichTeamStats(
 
     await prisma.matchTeamStatistics.upsert({
       where:  { matchId_teamId: { matchId, teamId: teamDbId } },
-      create: { matchId, teamId: teamDbId, isHome: false, ...teamStatFields },
+      create: { matchId, teamId: teamDbId, ...teamStatFields },
       update: teamStatFields,
     });
   }
-
-  // Fix isHome flag — resolve from match record
-  const match = await prisma.match.findUnique({
-    where:  { id: matchId },
-    select: { homeTeamId: true, awayTeamId: true },
-  });
-  if (!match) return;
-
-  await prisma.matchTeamStatistics.updateMany({
-    where: { matchId, teamId: match.homeTeamId },
-    data:  { isHome: true },
-  });
-  await prisma.matchTeamStatistics.updateMany({
-    where: { matchId, teamId: match.awayTeamId },
-    data:  { isHome: false },
-  });
 }
 
 // ── NitboxAward: Player of the Match ─────────────────────────────────────────
-// Formula (position-aware, normalized to 90 min):
-//   Outfield: goals*20 + assists*12 + keyPasses*3 + rating*5 + tackles*2 + interceptions*2
-//   GK:       saves*15 + rating*7 + (cleanSheet ? 20 : 0) + tackles*2
 
 export async function calculatePlayerOfMatch(
   prisma:  PrismaClient,
@@ -337,7 +316,7 @@ export async function calculatePlayerOfMatch(
   for (const ps of playerStats) {
     if (!ps.minutesPlayed || ps.minutesPlayed < 20) continue;
 
-    const isGK   = ps.player.position === 'G' || ps.player.position === 'GK';
+    const isGK   = ps.player.position === 'GK';
     const rating = ps.rating ?? 6.0;
 
     let score: number;
@@ -355,7 +334,6 @@ export async function calculatePlayerOfMatch(
             + (ps.interceptions ?? 0) * 2;
     }
 
-    // Normalize to 90 minutes
     score = score * (90 / Math.max(ps.minutesPlayed, 1));
 
     if (score > topScore) {
@@ -385,8 +363,8 @@ export async function calculatePlayerOfMatch(
 }
 
 // ── Full enrichment in one call ───────────────────────────────────────────────
-// Runs all four enrichment steps + NitboxAward + sets FULLY_ENRICHED.
-// Returns true if enrichment ran, false if already done.
+// Loads playerMap once, then runs all steps sequentially (not parallel) to
+// respect the API rate limit — concurrent calls would fire all at once.
 
 export async function enrichMatch(
   prisma:    PrismaClient,
@@ -394,7 +372,6 @@ export async function enrichMatch(
   fixtureId: number,
   teamMap:   Map<number, number>,
 ): Promise<boolean> {
-  // Check current enrichment status
   const match = await prisma.match.findUnique({
     where:  { id: matchId },
     select: { enrichStatus: true },
@@ -402,27 +379,20 @@ export async function enrichMatch(
 
   if (match?.enrichStatus === 'FULLY_ENRICHED') return false;
 
+  // Pre-load all players once — eliminates N+1 lookups across all steps
+  const playerMap = new Map<number, number>();
+  (await prisma.player.findMany({ select: { id: true, apiFootballId: true } }))
+    .forEach(p => playerMap.set(p.apiFootballId, p.id));
+
   try {
-    // Run all four enrichment steps — errors in individual steps are logged
-    // but don't abort the others (some fixtures genuinely lack certain data)
-    const results = await Promise.allSettled([
-      enrichPlayerStats(prisma, matchId, fixtureId, teamMap),
-      enrichMatchEvents(prisma, matchId, fixtureId, teamMap),
-      enrichLineups(prisma, matchId, fixtureId, teamMap),
-      enrichTeamStats(prisma, matchId, fixtureId, teamMap),
-    ]);
+    // Run sequentially to respect rate limit (each step makes 1 API call)
+    await enrichPlayerStats(prisma, matchId, fixtureId, teamMap, playerMap).catch(logWarn);
+    await enrichMatchEvents(prisma, matchId, fixtureId, teamMap, playerMap).catch(logWarn);
+    await enrichLineups(prisma, matchId, fixtureId, teamMap, playerMap).catch(logWarn);
+    await enrichTeamStats(prisma, matchId, fixtureId, teamMap).catch(logWarn);
 
-    for (const r of results) {
-      if (r.status === 'rejected') {
-        if (r.reason instanceof DailyLimitError) throw r.reason;
-        console.warn(`    [WARN] enrichment step failed: ${r.reason?.message ?? r.reason}`);
-      }
-    }
-
-    // Calculate NitboxAward after player stats are in
     await calculatePlayerOfMatch(prisma, matchId);
 
-    // Mark as fully enriched
     await prisma.match.update({
       where: { id: matchId },
       data:  { enrichStatus: 'FULLY_ENRICHED' },
@@ -434,4 +404,9 @@ export async function enrichMatch(
     console.warn(`    [WARN] enrichMatch failed for matchId=${matchId}: ${err?.message ?? err}`);
     return false;
   }
+}
+
+function logWarn(err: any) {
+  if (err instanceof DailyLimitError) throw err;
+  console.warn(`    [WARN] enrichment step failed: ${err?.message ?? err}`);
 }

@@ -187,11 +187,13 @@ async function seedPlayers(prisma: PrismaClient) {
   (await prisma.country.findMany()).forEach(c => countryMap.set(c.name, c.id));
 
   for (const team of teams) {
+    // Skip if this team already has a squad with players (avoid 2 API calls per team)
     const existingSquad = await prisma.squad.findFirst({
       where: { teamId: team.id, competitionSeasonId: null },
+      include: { _count: { select: { squadPlayers: true } } },
     });
-    if (existingSquad) {
-      console.log(`  [SKIP] ${team.name}`);
+    if (existingSquad && existingSquad._count.squadPlayers > 0) {
+      console.log(`  [SKIP] ${team.name} — ${existingSquad._count.squadPlayers} players already seeded`);
       continue;
     }
 
@@ -204,33 +206,40 @@ async function seedPlayers(prisma: PrismaClient) {
     const profileMap = new Map<number, ApiPlayerResponse>();
     playerProfiles.forEach(p => profileMap.set(p.player.id, p));
 
-    const squad = await prisma.squad.create({
-      data: { teamId: team.id, competitionSeasonId: null, label: 'Current Squad' },
+    // findFirst + create for "current squad" (competitionSeasonId is null — can't upsert on null compound key)
+    let squad = await prisma.squad.findFirst({
+      where: { teamId: team.id, competitionSeasonId: null },
     });
+    if (!squad) {
+      squad = await prisma.squad.create({
+        data: { teamId: team.id, competitionSeasonId: null, label: 'Current Squad' },
+      });
+    }
 
     for (const sp of squadPlayers) {
       const profile = profileMap.get(sp.id);
       const p = profile?.player;
 
-      const nameParts        = sp.name.split(' ');
-      const firstName        = p?.firstname ?? nameParts[0];
-      const lastName         = (p?.lastname ?? nameParts.slice(1).join(' ')) || '-';
-      const nationalityId    = p ? (countryMap.get(p.nationality) ?? team.country.id) : team.country.id;
-      const birthCountryId   = p?.birth?.country ? (countryMap.get(p.birth.country) ?? null) : null;
+      const nameParts      = sp.name.split(' ');
+      const firstName      = p?.firstname ?? nameParts[0];
+      const lastName       = (p?.lastname ?? nameParts.slice(1).join(' ')) || '-';
+      // Always set nationalityId — it's non-nullable on Player
+      const nationalityId  = p ? (countryMap.get(p.nationality) ?? team.country.id) : team.country.id;
+      const birthCountryId = p?.birth?.country ? (countryMap.get(p.birth.country) ?? null) : null;
 
       const sharedFields = {
         firstName,
         lastName,
-        commonName:     p?.name ?? sp.name,
-        position:       normalizePosition(sp.position),
-        photoUrl:       sp.photo,
-        isInjured:      p?.injured ?? false,
-        heightCm:       parseCm(p?.height ?? null),
-        weightKg:       parseCm(p?.weight ?? null),
-        ...(p?.birth?.date    && { dateOfBirth:    new Date(p.birth.date) }),
-        ...(p?.birth?.place   && { birthPlace:     p.birth.place }),
-        ...(birthCountryId    && { birthCountryId }),
-        ...(nationalityId     && { nationalityId }),
+        commonName:    p?.name ?? sp.name,
+        nationalityId,                           // always set, never conditional
+        position:      normalizePosition(sp.position),
+        photoUrl:      sp.photo,
+        isInjured:     p?.injured ?? false,
+        heightCm:      parseCm(p?.height ?? null),
+        weightKg:      parseCm(p?.weight ?? null),
+        ...(p?.birth?.date  && { dateOfBirth:    new Date(p.birth.date) }),
+        ...(p?.birth?.place && { birthPlace:     p.birth.place }),
+        ...(birthCountryId  && { birthCountryId }),
       };
 
       const player = await prisma.player.upsert({
@@ -264,11 +273,7 @@ async function seedCoaches(prisma: PrismaClient) {
   teams.forEach(t => teamApiMap.set(t.apiFootballId, t.id));
 
   for (const team of teams) {
-    const existingAssignment = await prisma.coachAssignment.findFirst({ where: { teamId: team.id } });
-    if (existingAssignment) {
-      console.log(`  [SKIP] ${team.name}`);
-      continue;
-    }
+    // Always re-fetch coaches — national team coaches change frequently
 
     const results = await apiGet<ApiCoachResponse>('coachs', { team: team.apiFootballId });
     if (!results.length) { console.warn(`  [WARN] No coach data for ${team.name}`); continue; }
@@ -279,11 +284,15 @@ async function seedCoaches(prisma: PrismaClient) {
       const firstName  = apiCoach.firstname ?? (nameParts.slice(0, -1).join(' ') || apiCoach.name || 'Unknown');
       const lastName   = apiCoach.lastname  ?? (nameParts.slice(-1)[0] ?? '');
 
+      const nationalityId = apiCoach.nationality
+        ? (countryMap.get(apiCoach.nationality) ?? null)
+        : null;
+
       const coachFields = {
-        photoUrl:    apiCoach.photo,
-        nationality: apiCoach.nationality,
-        heightCm:    parseCm(apiCoach.height),
-        weightKg:    parseCm(apiCoach.weight),
+        photoUrl:     apiCoach.photo,
+        nationalityId,
+        heightCm:     parseCm(apiCoach.height),
+        weightKg:     parseCm(apiCoach.weight),
       };
 
       const coach = await prisma.coach.upsert({

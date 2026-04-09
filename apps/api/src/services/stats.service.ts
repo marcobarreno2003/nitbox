@@ -99,57 +99,54 @@ export class StatsService {
   async teamRankings(filters: { competitionId?: number; seasonYear?: number; limit?: number }) {
     const { competitionId, seasonYear, limit = 20 } = filters
 
-    const matchWhere: any = {
-      statusShort: { in: ['FT', 'AET', 'PEN'] },
-      homeScore:   { not: null },
-      awayScore:   { not: null },
-      ...(competitionId || seasonYear
-        ? {
-            competitionSeason: {
-              ...(competitionId ? { competitionId } : {}),
-              ...(seasonYear    ? { apiFootballSeason: seasonYear } : {}),
-            },
-          }
-        : {}),
-    }
-
-    const matches = await this.prisma.match.findMany({
-      where: matchWhere,
-      select: {
-        homeTeamId: true, awayTeamId: true,
-        homeScore: true,  awayScore: true,
+    // Use precomputed TeamSeasonStats instead of re-aggregating from raw matches
+    const rows = await this.prisma.teamSeasonStats.findMany({
+      where: {
+        ...(competitionId || seasonYear
+          ? {
+              competitionSeason: {
+                ...(competitionId ? { competitionId } : {}),
+                ...(seasonYear    ? { apiFootballSeason: seasonYear } : {}),
+              },
+            }
+          : {}),
+      },
+      include: {
+        team: { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
       },
     })
 
-    // Aggregate per team
-    const stats = new Map<number, {
+    // Aggregate across competition-seasons per team (a team may have multiple entries)
+    const byTeam = new Map<number, {
+      team: { id: number; name: true; fifaCode: string | null; logoUrl: string | null }
       played: number; wins: number; draws: number; losses: number
       goalsFor: number; goalsAgainst: number
     }>()
 
-    const ensure = (id: number) => {
-      if (!stats.has(id)) stats.set(id, { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 })
-      return stats.get(id)!
+    for (const r of rows) {
+      const existing = byTeam.get(r.teamId)
+      if (existing) {
+        existing.played   += r.matchesPlayed
+        existing.wins     += r.wins
+        existing.draws    += r.draws
+        existing.losses   += r.losses
+        existing.goalsFor     += r.goalsFor
+        existing.goalsAgainst += r.goalsAgainst
+      } else {
+        byTeam.set(r.teamId, {
+          team:         r.team as any,
+          played:       r.matchesPlayed,
+          wins:         r.wins,
+          draws:        r.draws,
+          losses:       r.losses,
+          goalsFor:     r.goalsFor,
+          goalsAgainst: r.goalsAgainst,
+        })
+      }
     }
 
-    for (const m of matches) {
-      const hs = m.homeScore!
-      const as_ = m.awayScore!
-      const home = ensure(m.homeTeamId)
-      const away = ensure(m.awayTeamId)
-
-      home.played++; away.played++
-      home.goalsFor    += hs; home.goalsAgainst += as_
-      away.goalsFor    += as_; away.goalsAgainst += hs
-
-      if      (hs > as_) { home.wins++;   away.losses++ }
-      else if (hs < as_) { away.wins++;   home.losses++ }
-      else               { home.draws++;  away.draws++  }
-    }
-
-    const ranked = [...stats.entries()]
-      .map(([teamId, s]) => ({
-        teamId,
+    const ranked = [...byTeam.values()]
+      .map(s => ({
         ...s,
         points:         s.wins * 3 + s.draws,
         goalDifference: s.goalsFor - s.goalsAgainst,
@@ -158,15 +155,8 @@ export class StatsService {
       .sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor)
       .slice(0, limit)
 
-    const teams = await this.prisma.nationalTeam.findMany({
-      where: { id: { in: ranked.map(r => r.teamId) } },
-      select: { id: true, name: true, fifaCode: true, logoUrl: true },
-    })
-    const teamMap = new Map(teams.map(t => [t.id, t]))
-
     return ranked.map((r, i) => ({
       rank: i + 1,
-      team: teamMap.get(r.teamId) ?? null,
       ...r,
     }))
   }
@@ -204,10 +194,22 @@ export class StatsService {
       else              draws++
     }
 
-    const [teamA, teamB] = await Promise.all([
-      this.prisma.nationalTeam.findUnique({ where: { id: teamAId }, select: { id: true, name: true, fifaCode: true, logoUrl: true } }),
-      this.prisma.nationalTeam.findUnique({ where: { id: teamBId }, select: { id: true, name: true, fifaCode: true, logoUrl: true } }),
-    ])
+    // Derive team info from matches (already included) or fetch if no matches exist
+    let teamA = matches.length
+      ? (matches[0].homeTeamId === teamAId ? matches[0].homeTeam : matches[0].awayTeam)
+      : null
+    let teamB = matches.length
+      ? (matches[0].homeTeamId === teamBId ? matches[0].homeTeam : matches[0].awayTeam)
+      : null
+
+    if (!teamA || !teamB) {
+      const [a, b] = await Promise.all([
+        !teamA ? this.prisma.nationalTeam.findUnique({ where: { id: teamAId }, select: { id: true, name: true, fifaCode: true, logoUrl: true } }) : null,
+        !teamB ? this.prisma.nationalTeam.findUnique({ where: { id: teamBId }, select: { id: true, name: true, fifaCode: true, logoUrl: true } }) : null,
+      ])
+      teamA = teamA ?? a
+      teamB = teamB ?? b
+    }
 
     return {
       teamA,

@@ -30,7 +30,6 @@ export interface ApiFixture {
     referee:   string | null;
     timezone:  string;
     date:      string;
-    timestamp: number;
     periods:   { first: number | null; second: number | null };
     venue:     { id: number | null; name: string; city: string };
     status:    { long: string; short: string; elapsed: number | null; extra: number | null };
@@ -59,9 +58,7 @@ export interface ApiFixture {
 export function matchUpdateData(f: ApiFixture) {
   return {
     kickoffAt:     new Date(f.fixture.date),
-    timestamp:     f.fixture.timestamp,
     statusShort:   f.fixture.status.short,
-    statusLong:    f.fixture.status.long,
     statusElapsed: f.fixture.status.elapsed,
     statusExtra:   f.fixture.status.extra,
     roundLabel:    f.league.round,
@@ -90,7 +87,7 @@ export function matchCreateData(
     homeTeamId:          homeDbId,
     awayTeamId:          awayDbId,
     venueId,
-    timezone:            f.fixture.timezone,
+    timezone:            f.fixture.timezone ?? null,
     periodFirstStart:    f.fixture.periods.first,
     periodSecondStart:   f.fixture.periods.second,
     enrichStatus:        'SCHEDULED' as const,

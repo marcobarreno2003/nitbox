@@ -1,17 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
-
-const API_FOOTBALL_BASE = 'https://v3.football.api-sports.io'
 
 @Injectable()
 export class MatchesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
   ) {}
 
-  search(q: string, limit = 20) {
+  search(q: string, limit = 20, offset = 0) {
     const term = q.trim()
     if (!term) return Promise.resolve([])
     return this.prisma.match.findMany({
@@ -31,6 +27,7 @@ export class MatchesService {
         competitionSeason: { include: { competition: true } },
       },
       orderBy: { kickoffAt: 'desc' },
+      skip: offset,
       take: limit,
     })
   }
@@ -89,48 +86,16 @@ export class MatchesService {
   }
 
   async findLive() {
-    const apiKey = this.config.get<string>('API_FOOTBALL_KEY')
-
-    const teams = await this.prisma.nationalTeam.findMany({
-      select: { id: true, name: true, apiFootballId: true, fifaCode: true, logoUrl: true },
-    })
-    const teamByApiId = new Map(teams.map((t: typeof teams[number]) => [t.apiFootballId, t]))
-    const teamApiIds  = new Set(teams.map((t: typeof teams[number]) => t.apiFootballId))
-
-    const res = await fetch(`${API_FOOTBALL_BASE}/fixtures?live=all`, {
-      headers: { 'x-apisports-key': apiKey! },
-    })
-    if (!res.ok) return []
-
-    const json     = await res.json() as { response: any[] }
-    const fixtures = json.response ?? []
-
-    const live = fixtures.filter(
-      f => teamApiIds.has(f.teams.home.id) && teamApiIds.has(f.teams.away.id),
-    )
-
-    return live.map(f => ({
-      fixtureId: f.fixture.id,
-      homeTeam:  teamByApiId.get(f.teams.home.id),
-      awayTeam:  teamByApiId.get(f.teams.away.id),
-      homeScore: f.goals.home  as number | null,
-      awayScore: f.goals.away  as number | null,
-      minute:    f.fixture.status.elapsed as number | null,
-      status: {
-        short:   f.fixture.status.short   as string,
-        long:    f.fixture.status.long    as string,
-        elapsed: f.fixture.status.elapsed as number | null,
-        extra:   f.fixture.status.extra   as number | null,
+    return this.prisma.match.findMany({
+      where: { enrichStatus: 'LIVE' },
+      include: {
+        homeTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        awayTeam:          { select: { id: true, name: true, fifaCode: true, logoUrl: true } },
+        competitionSeason: { include: { competition: { select: { id: true, name: true, shortName: true, logoUrl: true } } } },
+        venue:             { select: { id: true, name: true, city: true } },
       },
-      competition: {
-        apiId:  f.league.id     as number,
-        name:   f.league.name   as string,
-        logo:   f.league.logo   as string,
-        round:  f.league.round  as string,
-        season: f.league.season as number,
-      },
-      kickoffAt: f.fixture.date as string,
-    }))
+      orderBy: { kickoffAt: 'asc' },
+    })
   }
 
   async findOne(id: number) {

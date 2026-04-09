@@ -51,11 +51,16 @@ export class EnrichService {
         [match.awayTeam.apiFootballId, match.awayTeam.id],
       ])
 
-      await Promise.allSettled([
-        this.enrichPlayerStats(matchId, apiFixtureId, teamMap),
-        this.enrichLineups(matchId, apiFixtureId, teamMap),
-        this.enrichTeamStats(matchId, apiFixtureId, teamMap),
-      ])
+      // Pre-load all players once to avoid N+1 lookups across enrichment steps
+      const allPlayers = await this.prisma.player.findMany({
+        select: { id: true, apiFootballId: true },
+      })
+      const playerMap = new Map(allPlayers.map(p => [p.apiFootballId, p.id]))
+
+      // Run sequentially to respect API rate limit (each step makes 1 API call)
+      await this.enrichPlayerStats(matchId, apiFixtureId, teamMap, playerMap).catch(e => this.logger.warn(`enrichPlayerStats failed: ${e}`))
+      await this.enrichLineups(matchId, apiFixtureId, teamMap, playerMap).catch(e => this.logger.warn(`enrichLineups failed: ${e}`))
+      await this.enrichTeamStats(matchId, apiFixtureId, teamMap).catch(e => this.logger.warn(`enrichTeamStats failed: ${e}`))
 
       // Recompute final standings
       await this.standings.recalculateFinal(match.competitionSeasonId, match.groupId)
@@ -82,7 +87,7 @@ export class EnrichService {
 
   // ── Player Stats ───────────────────────────────────────────────────────────────
 
-  private async enrichPlayerStats(matchId: number, apiFixtureId: number, teamMap: Map<number, number>) {
+  private async enrichPlayerStats(matchId: number, apiFixtureId: number, teamMap: Map<number, number>, playerMap: Map<number, number>) {
     const data = await this.api.get<{ response: any[] }>(`/fixtures/players?fixture=${apiFixtureId}`)
     const teamEntries = data.response ?? []
     if (!teamEntries.length) return
@@ -95,11 +100,8 @@ export class EnrichService {
         const apiPlayerId = entry.player?.id
         if (!apiPlayerId) continue
 
-        const player = await this.prisma.player.findFirst({
-          where: { apiFootballId: apiPlayerId },
-          select: { id: true },
-        })
-        if (!player) continue
+        const playerId = playerMap.get(apiPlayerId)
+        if (!playerId) continue
 
         const s = entry.statistics?.[0]
         if (!s) continue
@@ -109,9 +111,9 @@ export class EnrichService {
           : null
 
         await this.prisma.playerMatchStats.upsert({
-          where: { matchId_playerId: { matchId, playerId: player.id } },
+          where: { matchId_playerId: { matchId, playerId } },
           create: {
-            matchId, playerId: player.id, teamId,
+            matchId, playerId, teamId,
             minutesPlayed:     s.games?.minutes     ?? null,
             rating:            s.games?.rating      ? parseFloat(s.games.rating) : null,
             captain:           s.games?.captain     ?? false,
@@ -177,7 +179,7 @@ export class EnrichService {
 
   // ── Lineups ────────────────────────────────────────────────────────────────────
 
-  private async enrichLineups(matchId: number, apiFixtureId: number, teamMap: Map<number, number>) {
+  private async enrichLineups(matchId: number, apiFixtureId: number, teamMap: Map<number, number>, playerMap: Map<number, number>) {
     const data = await this.api.get<{ response: any[] }>(`/fixtures/lineups?fixture=${apiFixtureId}`)
     const lineupEntries = data.response ?? []
     if (!lineupEntries.length) return
@@ -209,17 +211,14 @@ export class EnrichService {
 
       for (const lp of allPlayers) {
         if (!lp.id) continue
-        const player = await this.prisma.player.findFirst({
-          where: { apiFootballId: lp.id },
-          select: { id: true },
-        })
-        if (!player) continue
+        const playerId = playerMap.get(lp.id)
+        if (!playerId) continue
 
         await this.prisma.lineupPlayer.upsert({
-          where: { lineupId_playerId: { lineupId: lineup.id, playerId: player.id } },
+          where: { lineupId_playerId: { lineupId: lineup.id, playerId } },
           create: {
             lineupId:    lineup.id,
-            playerId:    player.id,
+            playerId,
             shirtNumber: lp.number   ?? null,
             positionCode: lp.pos     ?? null,
             gridPosition: lp.grid    ?? null,
@@ -272,14 +271,9 @@ export class EnrichService {
         }
       }
 
-      const isHome = (await this.prisma.match.findUnique({
-        where: { id: matchId },
-        select: { homeTeamId: true },
-      }))?.homeTeamId === teamId
-
       await this.prisma.matchTeamStatistics.upsert({
         where: { matchId_teamId: { matchId, teamId } },
-        create: { matchId, teamId, isHome, ...stats },
+        create: { matchId, teamId, ...stats },
         update: stats,
       })
     }

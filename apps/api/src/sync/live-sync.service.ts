@@ -166,6 +166,16 @@ export class LiveSyncService {
     homeTeamId: number,
     awayTeamId: number,
   ) {
+    // Fetch match with API IDs for team mapping
+    const matchRow = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        homeTeam: { select: { id: true, apiFootballId: true } },
+        awayTeam: { select: { id: true, apiFootballId: true } },
+      },
+    })
+    if (!matchRow) return
+
     const data = await this.api.get<{ response: any[] }>(`/fixtures/events?fixture=${apiFixtureId}`)
     const apiEvents = data.response ?? []
     if (!apiEvents.length) return
@@ -179,58 +189,31 @@ export class LiveSyncService {
       existing.map((e: { minute: number | null; type: string | null; detail: string | null; playerId: number | null }) => `${e.minute}|${e.type}|${e.detail}|${e.playerId ?? ''}`)
     )
 
-    // Resolve team IDs from API IDs
-    const teams = await this.prisma.nationalTeam.findMany({
-      where: { apiFootballId: { in: [homeTeamId, awayTeamId] } },
-      select: { id: true, apiFootballId: true },
-    })
-    // Actually homeTeamId/awayTeamId are already our internal IDs — we need API IDs
-    // Get the full match to resolve this
-    const matchRow = await this.prisma.match.findUnique({
-      where: { id: matchId },
-      include: {
-        homeTeam: { select: { id: true, apiFootballId: true } },
-        awayTeam: { select: { id: true, apiFootballId: true } },
-      },
-    })
-    if (!matchRow) return
-
     const teamMap = new Map([
       [matchRow.homeTeam.apiFootballId, matchRow.homeTeam.id],
       [matchRow.awayTeam.apiFootballId, matchRow.awayTeam.id],
     ])
 
-    // Build running score tracker for scoreHome/scoreAway on each event
-    let runHome = 0
-    let runAway = 0
+    // Pre-load all players referenced in events to avoid N+1 lookups
+    const apiPlayerIds = [
+      ...new Set(
+        apiEvents.flatMap((ev: any) => [ev.player?.id, ev.assist?.id]).filter(Boolean) as number[],
+      ),
+    ]
+    const players = apiPlayerIds.length
+      ? await this.prisma.player.findMany({
+          where: { apiFootballId: { in: apiPlayerIds } },
+          select: { id: true, apiFootballId: true },
+        })
+      : []
+    const playerMap = new Map(players.map(p => [p.apiFootballId, p.id]))
 
     for (const ev of apiEvents) {
       const teamInternalId = teamMap.get(ev.team.id)
       if (!teamInternalId) continue
 
-      // Resolve player if API provides an ID
-      let playerId: number | null = null
-      let assistPlayerId: number | null = null
-      if (ev.player?.id) {
-        const p = await this.prisma.player.findFirst({
-          where: { apiFootballId: ev.player.id },
-          select: { id: true },
-        })
-        playerId = p?.id ?? null
-      }
-      if (ev.assist?.id) {
-        const p = await this.prisma.player.findFirst({
-          where: { apiFootballId: ev.assist.id },
-          select: { id: true },
-        })
-        assistPlayerId = p?.id ?? null
-      }
-
-      // Update running score
-      if (ev.type === 'Goal' && ev.detail !== 'Missed Penalty') {
-        if (teamInternalId === matchRow.homeTeamId) runHome++
-        else runAway++
-      }
+      const playerId       = ev.player?.id ? (playerMap.get(ev.player.id) ?? null) : null
+      const assistPlayerId = ev.assist?.id ? (playerMap.get(ev.assist.id) ?? null) : null
 
       const fingerprint = `${ev.time.elapsed}|${ev.type}|${ev.detail}|${playerId ?? ''}`
       if (existingSet.has(fingerprint)) continue
@@ -246,8 +229,6 @@ export class LiveSyncService {
           type:          ev.type,
           detail:        ev.detail ?? null,
           comments:      ev.comments ?? null,
-          scoreHome:     runHome,
-          scoreAway:     runAway,
         },
       })
       existingSet.add(fingerprint)

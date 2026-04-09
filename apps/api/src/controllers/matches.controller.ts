@@ -34,13 +34,15 @@ export class MatchesController {
   @Get('search')
   @ApiOperation({ summary: 'Search matches', description: 'Full-text search on team names, FIFA codes, and competition names.' })
   @ApiQuery({ name: 'q',     required: true,  description: 'Search query (team name, FIFA code, competition)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Max results (default 20)' })
+  @ApiQuery({ name: 'limit',  required: false, description: 'Max results (default 20)' })
+  @ApiQuery({ name: 'offset', required: false, description: 'Number of results to skip (default 0)' })
   @ApiResponse({ status: 200, description: 'Matching matches ordered by date.' })
   search(
-    @Query('q')     q?:     string,
-    @Query('limit') limit?: string,
+    @Query('q')      q?:      string,
+    @Query('limit')  limit?:  string,
+    @Query('offset') offset?: string,
   ) {
-    return this.matchesService.search(q ?? '', limit ? Number(limit) : 20)
+    return this.matchesService.search(q ?? '', limit ? Number(limit) : 20, offset ? Number(offset) : 0)
   }
 
   @Get('upcoming')
