@@ -11,6 +11,7 @@ on:
 
 jobs:
   seed-predictions:
+    if: false  # Disabled — NITBox is now a static portfolio site
     name: Train models + seed predictions
     runs-on: self-hosted     # runs on the Asus Ubuntu server where FastAPI lives
     timeout-minutes: 60

@@ -3,8 +3,8 @@ import { notFound } from 'next/navigation'
 import LineupsSection from '@/components/LineupsSection'
 import MatchStatsPanel from '@/components/MatchStatsPanel'
 import PlayerPerformanceTable from '@/components/PlayerPerformanceTable'
+import { readData, readManifest } from '@/lib/data'
 import {
-  apiFetch,
   formatDate,
   formatTime,
   statusLabel,
@@ -16,45 +16,36 @@ import {
   type PlayerStat,
 } from '@/lib/api'
 
-export const revalidate = 60
+// ── Static params for all matches ────────────────────────────────────────────
 
-// ── Data fetching ──────────────────────────────────────────────────────────
-
-async function getMatch(id: string): Promise<MatchDetail | null> {
-  return apiFetch<MatchDetail>(`/matches/${id}`, 60)
-}
-
-async function getLineups(id: string): Promise<Lineup[]> {
-  const data = await apiFetch<Lineup[]>(`/matches/${id}/lineups`, 3600)
-  return data ?? []
-}
-
-async function getEvents(id: string): Promise<MatchEvent[]> {
-  const data = await apiFetch<MatchEvent[]>(`/matches/${id}/events`, 3600)
-  return data ?? []
-}
-
-async function getPlayerStats(id: string): Promise<PlayerStat[]> {
-  const data = await apiFetch<PlayerStat[]>(`/matches/${id}/players`, 3600)
-  return data ?? []
+export function generateStaticParams() {
+  const manifest = readManifest()
+  return (manifest?.matchIds ?? []).map(id => ({ id: String(id) }))
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-export default async function MatchPage({
+interface MatchData {
+  match: MatchDetail | null
+  lineups: Lineup[]
+  events: MatchEvent[]
+  players: PlayerStat[]
+}
+
+export default function MatchPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
-  const { id } = await params
-  const [match, lineups, events, playerStats] = await Promise.all([
-    getMatch(id),
-    getLineups(id),
-    getEvents(id),
-    getPlayerStats(id),
-  ])
+  const { id } = params
+  const data = readData<MatchData>(`matches/${id}.json`)
 
-  if (!match) notFound()
+  if (!data?.match) notFound()
+
+  const match = data.match
+  const lineups = data.lineups ?? []
+  const events = data.events ?? []
+  const playerStats = data.players ?? []
 
   const live     = isLive(match.statusShort)
   const status   = statusLabel(match)
@@ -77,7 +68,7 @@ export default async function MatchPage({
         <span>{match.homeTeam.fifaCode ?? match.homeTeam.name} vs {match.awayTeam.fifaCode ?? match.awayTeam.name}</span>
       </div>
 
-      {/* ── Score card ── */}
+      {/* Score card */}
       <div className="bg-surface border border-border rounded-2xl p-8">
         <p className="text-center text-text-muted text-xs mb-6 uppercase tracking-widest">
           {match.competitionSeason.competition.name} · {match.competitionSeason.apiFootballSeason}
@@ -111,12 +102,7 @@ export default async function MatchPage({
               </div>
             )}
 
-            <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-              live
-                ? 'bg-green-400/15 text-green-400'
-                : 'bg-surface border border-border text-text-muted'
-            }`}>
-              {live && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse mr-1.5 align-middle" />}
+            <span className="text-sm font-bold px-3 py-1 rounded-full bg-surface border border-border text-text-muted">
               {status}
             </span>
 
@@ -162,7 +148,7 @@ export default async function MatchPage({
         )}
       </div>
 
-      {/* ── Lineups + Events ── */}
+      {/* Lineups + Events */}
       {(homeLineup || awayLineup || allEvents.length > 0) && (
         <LineupsSection
           homeLineup={homeLineup}
@@ -173,7 +159,7 @@ export default async function MatchPage({
         />
       )}
 
-      {/* ── Match Stats ── */}
+      {/* Match Stats */}
       {isFinished && match.teamStatistics.length > 0 && (
         <MatchStatsPanel
           homeTeamName={match.homeTeam.name}
@@ -182,7 +168,7 @@ export default async function MatchPage({
         />
       )}
 
-      {/* ── Player Performance ── */}
+      {/* Player Performance */}
       {isFinished && playerStats.length > 0 && (
         <PlayerPerformanceTable
           playerStats={playerStats}

@@ -12,6 +12,7 @@ on:
 
 jobs:
   seed-matches-finished:
+    if: false  # Disabled — NITBox is now a static portfolio site
     name: Enrich finished matches
     runs-on: ubuntu-latest
     timeout-minutes: 60

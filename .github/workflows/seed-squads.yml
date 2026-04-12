@@ -12,6 +12,7 @@ on:
 
 jobs:
   seed-squads:
+    if: false  # Disabled — NITBox is now a static portfolio site
     name: Refresh player rosters + coaches
     runs-on: ubuntu-latest
     timeout-minutes: 60

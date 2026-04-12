@@ -1,13 +1,6 @@
 import Link from 'next/link'
-import LiveBanner from '@/components/LiveBanner'
-import { apiFetch, formatDate, statusLabel, type Match } from '@/lib/api'
-
-export const revalidate = 120
-
-async function getRecentMatches(): Promise<Match[]> {
-  const data = await apiFetch<Match[]>('/matches?limit=5&status=FT', 120)
-  return data ?? []
-}
+import { readData } from '@/lib/data'
+import { formatDate, statusLabel, type Match } from '@/lib/api'
 
 const featuredStats = [
   {
@@ -51,8 +44,9 @@ const latestArticles = [
   },
 ]
 
-export default async function HomePage() {
-  const recentMatches = await getRecentMatches()
+export default function HomePage() {
+  const recentMatches = readData<Match[]>('matches-recent.json') ?? []
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-16 space-y-24">
 
@@ -86,9 +80,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Live banner — only renders if matches are in progress */}
-      <LiveBanner />
-
       {/* Recent matches */}
       <section className="space-y-6">
         <div className="flex items-center justify-between">
@@ -100,7 +91,7 @@ export default async function HomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {recentMatches.length === 0 ? (
             <p className="text-text-muted text-sm col-span-5">No se encontraron partidos recientes.</p>
-          ) : recentMatches.map((match) => (
+          ) : recentMatches.slice(0, 5).map((match) => (
             <Link
               key={match.id}
               href={`/matches/${match.id}`}
@@ -174,24 +165,17 @@ export default async function HomePage() {
 
       {/* Latest articles */}
       <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-primary">Del blog</h2>
-          <Link href="/blog" className="text-sm text-text-muted hover:text-accent transition-colors">
-            Ver todos
-          </Link>
-        </div>
+        <h2 className="text-lg font-semibold text-text-primary">Del blog</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {latestArticles.map((article) => (
-            <Link
+            <div
               key={article.slug}
-              href={`/blog/${article.slug}`}
-              className="bg-surface border border-border rounded-xl p-6 space-y-3 hover:border-accent/40 transition-colors block"
+              className="bg-surface border border-border rounded-xl p-6 space-y-3"
             >
               <p className="text-text-muted text-xs">{article.date}</p>
               <h3 className="text-text-primary font-semibold text-base leading-snug">{article.title}</h3>
               <p className="text-text-muted text-sm leading-relaxed line-clamp-3">{article.excerpt}</p>
-              <p className="text-accent text-xs font-medium pt-1">Leer más →</p>
-            </Link>
+            </div>
           ))}
         </div>
       </section>

@@ -1,16 +1,6 @@
 import Link from 'next/link'
-import { apiFetch, formatDate, formatTime } from '@/lib/api'
-
-export const revalidate = 300
-
-interface Prediction {
-  predictedResult: string
-  homeWinProb:     number
-  drawProb:        number
-  awayWinProb:     number
-  confidence:      number
-  modelVersion:    string
-}
+import { readData } from '@/lib/data'
+import { formatDate, formatTime } from '@/lib/api'
 
 interface UpcomingMatch {
   id:          number
@@ -24,44 +14,6 @@ interface UpcomingMatch {
     competition: { id: number; name: string; logoUrl: string | null }
   }
   venue:      { name: string; city: string } | null
-  prediction: Prediction | null
-}
-
-async function getUpcoming(): Promise<UpcomingMatch[]> {
-  const data = await apiFetch<UpcomingMatch[]>('/matches/upcoming?limit=123', 300)
-  return data ?? []
-}
-
-function PredictionBar({ pred }: { pred: Prediction }) {
-  const h = Math.round(pred.homeWinProb * 100)
-  const d = Math.round(pred.drawProb * 100)
-  const a = Math.round(pred.awayWinProb * 100)
-
-  const winnerColor =
-    pred.predictedResult === 'HOME' ? 'text-blue-400' :
-    pred.predictedResult === 'AWAY' ? 'text-red-400'  :
-    'text-text-muted'
-
-  return (
-    <div className="mt-3 space-y-1.5">
-      {/* Probability bar */}
-      <div className="flex h-1.5 rounded-full overflow-hidden">
-        <div className="bg-blue-500 transition-all" style={{ width: `${h}%` }} />
-        <div className="bg-border/60 transition-all" style={{ width: `${d}%` }} />
-        <div className="bg-red-500 transition-all" style={{ width: `${a}%` }} />
-      </div>
-      {/* Labels */}
-      <div className="flex justify-between text-[10px] font-mono">
-        <span className={pred.predictedResult === 'HOME' ? 'text-blue-400 font-bold' : 'text-text-muted'}>{h}%</span>
-        <span className={pred.predictedResult === 'DRAW' ? 'text-text-primary font-bold' : 'text-text-muted'}>{d}%</span>
-        <span className={pred.predictedResult === 'AWAY' ? 'text-red-400 font-bold' : 'text-text-muted'}>{a}%</span>
-      </div>
-      <p className={`text-[10px] text-center font-semibold uppercase tracking-wider ${winnerColor}`}>
-        {pred.predictedResult === 'HOME' ? 'Home Win' : pred.predictedResult === 'AWAY' ? 'Away Win' : 'Draw'}
-        {' '}· {Math.round(pred.confidence * 100)}% conf.
-      </p>
-    </div>
-  )
 }
 
 function UpcomingCard({ match }: { match: UpcomingMatch }) {
@@ -78,7 +30,7 @@ function UpcomingCard({ match }: { match: UpcomingMatch }) {
           </span>
         </div>
 
-        {/* Teams + score placeholder */}
+        {/* Teams */}
         <div className="flex items-center gap-3">
           {/* Home */}
           <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
@@ -109,9 +61,6 @@ function UpcomingCard({ match }: { match: UpcomingMatch }) {
           </div>
         </div>
 
-        {/* ML Prediction */}
-        {match.prediction && <PredictionBar pred={match.prediction} />}
-
         {/* Venue */}
         {match.venue && (
           <p className="text-[10px] text-text-muted text-center mt-2 truncate">
@@ -123,8 +72,8 @@ function UpcomingCard({ match }: { match: UpcomingMatch }) {
   )
 }
 
-export default async function UpcomingPage() {
-  const matches = await getUpcoming()
+export default function UpcomingPage() {
+  const matches = readData<UpcomingMatch[]>('matches-upcoming.json') ?? []
 
   // Group by month
   const groups = matches.reduce<Record<string, UpcomingMatch[]>>((acc, m) => {
@@ -142,7 +91,7 @@ export default async function UpcomingPage() {
       <div>
         <h1 className="text-3xl font-bold text-text-primary">Upcoming Matches</h1>
         <p className="text-text-muted mt-1 text-sm">
-          {matches.length} fixtures · ML predictions powered by NITBox
+          {matches.length} scheduled fixtures
         </p>
       </div>
 

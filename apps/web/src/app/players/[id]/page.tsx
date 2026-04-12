@@ -5,8 +5,7 @@
 
 import PlayerCard, { PlayerRating } from '../../../components/PlayerCard'
 import RatingHistoryChart from '../../../components/RatingHistoryChart'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+import { readData, readManifest } from '@/lib/data'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,41 +70,20 @@ interface PlayerProfile {
   nitboxAwards:  Award[]
 }
 
-// ── Fetchers ─────────────────────────────────────────────────────────────────
-
-async function safeJson<T>(res: Response, fallback: T): Promise<T> {
-  try {
-    const text = await res.text()
-    if (!text) return fallback
-    return JSON.parse(text)
-  } catch { return fallback }
+interface PlayerData {
+  player: PlayerProfile | null
+  rating: PlayerRating | null
+  stats:  SeasonStats[]
 }
 
-async function fetchPlayer(id: string): Promise<PlayerProfile | null> {
-  try {
-    const res = await fetch(`${API}/players/${id}`, { next: { revalidate: 3600 } })
-    if (!res.ok) return null
-    return safeJson(res, null)
-  } catch { return null }
+// ── Static params ───────────────────────────────���───────────────────────────
+
+export function generateStaticParams() {
+  const manifest = readManifest()
+  return (manifest?.playerIds ?? []).map(id => ({ id: String(id) }))
 }
 
-async function fetchRating(id: string): Promise<PlayerRating | null> {
-  try {
-    const res = await fetch(`${API}/players/${id}/rating`, { next: { revalidate: 1800 } })
-    if (!res.ok) return null
-    return safeJson(res, null)
-  } catch { return null }
-}
-
-async function fetchStats(id: string): Promise<SeasonStats[]> {
-  try {
-    const res = await fetch(`${API}/players/${id}/stats`, { next: { revalidate: 3600 } })
-    if (!res.ok) return []
-    return safeJson(res, [])
-  } catch { return [] }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────���────────────────────────────────
 
 const AWARD_LABEL: Record<string, string> = {
   PLAYER_OF_MATCH:  'Man of the Match',
@@ -136,13 +114,13 @@ function age(dob: string | null) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const [player, rating, seasonStats] = await Promise.all([
-    fetchPlayer(id),
-    fetchRating(id),
-    fetchStats(id),
-  ])
+export default function PlayerPage({ params }: { params: { id: string } }) {
+  const { id } = params
+  const data = readData<PlayerData>(`players/${id}.json`)
+
+  const player = data?.player ?? null
+  const rating = data?.rating ?? null
+  const seasonStats = data?.stats ?? []
 
   if (!player) {
     return (
@@ -174,7 +152,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div>
           <div className="flex items-center gap-3 mb-1">
             {flagUrl && <img src={flagUrl} alt={player.nationality?.name} className="h-6 rounded-sm" />}
@@ -192,7 +170,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* ── Main layout ── */}
+        {/* Main layout */}
         <div className="flex flex-col lg:flex-row gap-10 items-start">
 
           {/* Left: Card */}
@@ -304,7 +282,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* ── Season stats table ── */}
+        {/* Season stats table */}
         {seasonStats.length > 0 && (
           <section>
             <h2 className="text-base font-bold text-slate-300 mb-4 uppercase tracking-widest">

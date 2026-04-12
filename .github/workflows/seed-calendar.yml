@@ -12,6 +12,7 @@ on:
 
 jobs:
   seed-calendar:
+    if: false  # Disabled — NITBox is now a static portfolio site
     name: Seed upcoming fixtures
     runs-on: ubuntu-latest
     timeout-minutes: 30

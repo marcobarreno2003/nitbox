@@ -4,8 +4,7 @@
 // =============================================================================
 
 import NitboxCard from '../../components/NitboxCard'
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+import { readData } from '@/lib/data'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,28 +36,6 @@ interface Award {
     apiFootballSeason: number
     competition: { id: number; name: string; shortName: string; logoUrl: string | null }
   } | null
-}
-
-// ── Fetchers ──────────────────────────────────────────────────────────────────
-
-async function fetchAwards(type: string, limit = 20): Promise<Award[]> {
-  try {
-    const res = await fetch(`${API}/awards?type=${type}&limit=${limit}`, { next: { revalidate: 3600 } })
-    if (!res.ok) return []
-    const text = await res.text()
-    if (!text) return []
-    return JSON.parse(text)
-  } catch { return [] }
-}
-
-async function fetchRating(playerId: number) {
-  try {
-    const res = await fetch(`${API}/players/${playerId}/rating`, { next: { revalidate: 1800 } })
-    if (!res.ok) return null
-    const text = await res.text()
-    if (!text) return null
-    return JSON.parse(text)
-  } catch { return null }
 }
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -122,31 +99,13 @@ function AwardCard({ award, rating }: { award: Award; rating: any | null }) {
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────��───────────────────────────────────────
 
-export default async function AwardsPage() {
-  const [potmAwards, potsAwards, bdAwards] = await Promise.all([
-    fetchAwards('PLAYER_OF_MATCH',  12),
-    fetchAwards('PLAYER_OF_SEASON', 10),
-    fetchAwards('BEST_DEFENSIVE',   10),
-  ])
-
-  // Fetch ratings for top award winners (first unique player per section)
-  const uniquePlayerIds = [
-    ...new Set([
-      ...potsAwards.map(a => a.player.id),
-      ...bdAwards.map(a => a.player.id),
-      ...potmAwards.slice(0, 6).map(a => a.player.id),
-    ]),
-  ]
-
-  const ratingsMap: Record<number, any> = {}
-  await Promise.all(
-    uniquePlayerIds.map(async pid => {
-      const r = await fetchRating(pid)
-      if (r) ratingsMap[pid] = r
-    })
-  )
+export default function AwardsPage() {
+  const potmAwards = readData<Award[]>('awards/player-of-match.json') ?? []
+  const potsAwards = readData<Award[]>('awards/player-of-season.json') ?? []
+  const bdAwards   = readData<Award[]>('awards/best-defensive.json') ?? []
+  const ratingsMap = readData<Record<number, any>>('awards/ratings.json') ?? {}
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">

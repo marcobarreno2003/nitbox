@@ -1,43 +1,36 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import MatchCard from './MatchCard'
 import { type Match } from '@/lib/api'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+interface Props {
+  matches: Match[]
+}
 
-export default function MatchesSearch() {
-  const [query,   setQuery]   = useState('')
-  const [results, setResults] = useState<Match[]>([])
-  const [loading, setLoading] = useState(false)
+export default function MatchesSearch({ matches }: Props) {
+  const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    const q = query.trim()
-    if (!q) { setResults([]); setLoading(false); return }
+  const q = query.trim().toLowerCase()
 
-    setLoading(true)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+  const filtered = q
+    ? matches.filter(m => {
+        const haystack = [
+          m.homeTeam.name,
+          m.awayTeam.name,
+          m.homeTeam.fifaCode,
+          m.awayTeam.fifaCode,
+          m.competitionSeason?.competition?.name,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return haystack.includes(q)
+      })
+    : []
 
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API}/matches/search?q=${encodeURIComponent(q)}&limit=24`)
-        const data: Match[] = res.ok ? await res.json() : []
-        setResults(data)
-      } catch {
-        setResults([])
-      } finally {
-        setLoading(false)
-      }
-    }, 350)
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [query])
-
-  const isActive = query.trim().length > 0
+  const isActive = q.length > 0
 
   return (
     <div className="space-y-4">
@@ -83,25 +76,16 @@ export default function MatchesSearch() {
       {/* Results */}
       {isActive && (
         <div className="space-y-3">
-          {/* Status row */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-text-muted">
-              {loading
-                ? 'Searching…'
-                : results.length === 0
-                ? `No matches found for "${query.trim()}"`
-                : `${results.length} match${results.length !== 1 ? 'es' : ''} for "${query.trim()}"`
-              }
-            </p>
-            {loading && (
-              <div className="w-4 h-4 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-            )}
-          </div>
+          <p className="text-xs text-text-muted">
+            {filtered.length === 0
+              ? `No matches found for "${query.trim()}"`
+              : `${filtered.length} match${filtered.length !== 1 ? 'es' : ''} for "${query.trim()}"`
+            }
+          </p>
 
-          {/* Match grid */}
-          {!loading && results.length > 0 && (
+          {filtered.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {results.map(m => (
+              {filtered.slice(0, 24).map(m => (
                 <MatchCard key={m.id} match={m} />
               ))}
             </div>
